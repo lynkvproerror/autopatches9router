@@ -572,6 +572,18 @@ function patchQuotaPageBulk() {
         '  if(q.total&&q.total>0)return Math.round((q.total-q.used)/q.total*100);',
         '  return null;',
         '};',
+        `const __9rTurnOffEmpty=async()=>{`,
+        `  let targets=${aliases.list}.filter(e=>(e.isActive??!0)&&${aliases.emptyPredicate}(e));`,
+        `  ${aliases.toggle}(targets.map(e=>e.id),!1);`,
+        `  let k12Hit=targets.some(e=>{let p=String(${aliases.quotaMap}[e.id]?.plan||"").toLowerCase();return p.includes("k12")});`,
+        '  if(k12Hit&&typeof __9rSyncK12Rotation==="function")try{await __9rSyncK12Rotation(false,"K12 b\u1ecb t\u1eaft b\u1edfi Turn off Empty")}catch(_){}',
+        '};',
+        `const __9rTurnOnAvailable=async()=>{`,
+        `  let targets=${aliases.list}.filter(e=>!(e.isActive??!0)&&!${aliases.emptyPredicate}(e));`,
+        `  ${aliases.toggle}(targets.map(e=>e.id),!0);`,
+        `  let k12Hit=targets.some(e=>{let p=String(${aliases.quotaMap}[e.id]?.plan||"").toLowerCase();return p.includes("k12")});`,
+        '  if(k12Hit&&typeof __9rSyncK12Rotation==="function")try{await __9rSyncK12Rotation(true,"K12 \u0111\u01b0\u1ee3c b\u1eadt b\u1edfi Turn on Available")}catch(_){}',
+        '};',
         'const bulkDelete401=async()=>{',
         `  const targets=planFilteredEZ.filter(e=>e.errorCode===401||e.errorCode==="401"||e.errorCode===402||e.errorCode==="402"||e.testStatus==="invalid"||(e.lastError&&(String(e.lastError).includes("401")||String(e.lastError).includes("402")))||(${aliases.quotaMap}[e.id]?.message&&(String(${aliases.quotaMap}[e.id].message).includes("401")||String(${aliases.quotaMap}[e.id].message).includes("402"))));`,
         '  if(!targets.length){alert("No 401/402 connections found on this page.");return;}',
@@ -585,6 +597,8 @@ function patchQuotaPageBulk() {
         `        ${aliases.errorSetter}(t=>{let r={...t};delete r[e.id];return r;});`,
         '      }));',
         `      await b(${aliases.fetchAccounts},${aliases.page});`,
+        `      let __k12DelHit=targets.some(e=>{let p=String(${aliases.quotaMap}[e.id]?.plan||"").toLowerCase();return p.includes("k12")});`,
+        '      if(__k12DelHit&&typeof __9rSyncK12Rotation==="function")try{alert("\u26a0\ufe0f C\u00e1c t\u00e0i kho\u1ea3n K12 v\u1eeba b\u1ecb x\u00f3a. K12 Rotation Engine s\u1ebd t\u1ef1 \u0111\u1ed9ng nh\u1eadn ra \u1edf l\u1ea7n rotation ti\u1ebfp theo.");await __9rSyncK12Rotation(false,"K12 b\u1ecb x\u00f3a b\u1edfi X\u00f3a 401/402")}catch(_){}',
         '    }catch(err){console.error(err)}',
         `    finally{${aliases.busySetter}(false);}`,
         '  }',
@@ -641,7 +655,7 @@ function patchQuotaPageBulk() {
     ].join('\n');
     
     const injectedButtons = [
-        `(0,a.jsxs)("button",{type:"button",onClick:()=>{${aliases.toggle}(${aliases.list}.filter(e=>!(e.isActive??!0)&&!${aliases.emptyPredicate}(e)).map(e=>e.id),!0)},disabled:${aliases.busy},className:"flex h-8 shrink-0 items-center gap-1 rounded-lg border border-emerald-500/30 px-2 text-xs text-emerald-500 transition-colors hover:bg-emerald-500/10 disabled:opacity-50",title:"Enable connections that still have quota on the current page",children:[(0,a.jsx)("span",{className:"material-symbols-outlined text-[14px]",children:"check_circle"}),(0,a.jsx)("span",{className:"hidden sm:inline",children:"Turn on Available"})]}),`,
+        `(0,a.jsxs)("button",{type:"button",onClick:__9rTurnOnAvailable,disabled:${aliases.busy},className:"flex h-8 shrink-0 items-center gap-1 rounded-lg border border-emerald-500/30 px-2 text-xs text-emerald-500 transition-colors hover:bg-emerald-500/10 disabled:opacity-50",title:"Enable connections that still have quota on the current page",children:[(0,a.jsx)("span",{className:"material-symbols-outlined text-[14px]",children:"check_circle"}),(0,a.jsx)("span",{className:"hidden sm:inline",children:"Turn on Available"})]}),`,
         `(0,a.jsxs)("button",{type:"button",onClick:bulkDelete401,disabled:${aliases.busy},className:"flex h-8 shrink-0 items-center gap-1 rounded-lg border border-red-500/30 px-2 text-xs text-red-500 transition-colors hover:bg-red-500/10 disabled:opacity-50",title:"Delete all connections with 401/402 error on the current page",children:[(0,a.jsx)("span",{className:"material-symbols-outlined text-[14px]",children:"delete_forever"}),(0,a.jsx)("span",{className:"hidden sm:inline",children:"Xóa 401/402"})]}),`,
 
         `(0,a.jsxs)("button",{type:"button",onClick:bulkDeactivate0Weekly,disabled:${aliases.busy},className:"flex h-8 shrink-0 items-center gap-1 rounded-lg border border-amber-500/30 px-2 text-xs text-amber-500 transition-colors hover:bg-amber-500/10 disabled:opacity-50",title:"Deactivate active connections whose weekly or session token quota is 0%",children:[(0,a.jsx)("span",{className:"material-symbols-outlined text-[14px]",children:"block"}),(0,a.jsx)("span",{className:"hidden sm:inline",children:"Tắt 0% token"})]}),`,
@@ -649,6 +663,14 @@ function patchQuotaPageBulk() {
     ].join('');
     
     c = c.replace(targetSearch, injectedFuncs).replace(buttonSearch, injectedButtons);
+
+    // Wrap native "Turn off Empty" button onClick with K12 sync wrapper
+    const turnOffEmptyOnClick = `onClick:()=>{${aliases.toggle}(${aliases.list}.filter(e=>(e.isActive??!0)&&${aliases.emptyPredicate}(e)).map(e=>e.id),!1)}`;
+    if (c.includes(turnOffEmptyOnClick)) {
+        c = c.replace(turnOffEmptyOnClick, 'onClick:__9rTurnOffEmpty');
+        console.log('  ✅ Wrapped Turn off Empty with K12 sync');
+    }
+
     fs.writeFileSync(file, c, 'utf8');
     console.log('  ✅ Added bulk actions on Quota page');
     return true;
