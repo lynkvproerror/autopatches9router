@@ -1,6 +1,7 @@
 # Ignore dependencies and build artifacts
 node_modules/
 automation/work/
+*.test.js
 
 # Ignore runtime data and state files
 k12-rotation.json

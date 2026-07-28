@@ -96,17 +96,6 @@ pwsh -File .\automation\9router-control.ps1 -Action RestartDashboard
 
 ---
 
-## 🧪 Kiểm thử Tự động (Regression Test Suite)
-
-Dự án đi kèm bộ test kiểm thử tích hợp 82/82 test cases thành công:
-```bash
-node --test api-gateway.test.js
-node --test quota-patch.test.js
-node --test automation.test.js
-```
-
----
-
 ## 📄 Bản quyền & Đóng góp
 
 - **Author:** Lynk Vpro
