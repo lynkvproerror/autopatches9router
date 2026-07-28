@@ -1,7 +1,14 @@
 # Ignore dependencies and build artifacts
 node_modules/
 automation/work/
+automation/legacy-backup/
+automation/state/
 *.test.js
+
+# Ignore temporary patch backup files
+*.patched.js
+my-patches_*.js
+pre-update_*.js
 
 # Ignore runtime data and state files
 k12-rotation.json

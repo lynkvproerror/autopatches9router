@@ -1742,10 +1742,11 @@ function patchK12RotationDashboard() {
 
     const k12Funcs =
         'const __k12ApiBase="http://"+(typeof window!=="undefined"&&window.location?window.location.hostname:"127.0.0.1")+":53220";' +
+        `const k12RotPageRefresh=()=>{try{if(typeof ${aliases.fetchAccounts}==="function")${aliases.fetchAccounts}()}catch(_e){}};` +
         'const k12RotFetch=async()=>{setK12RotLoading(true);try{let r=await fetch(__k12ApiBase+"/api/k12-rotation/status");if(r.ok){let d=await r.json();setK12RotStatus(d);if(d.config)setK12RotCfg({activePercent:d.config.activePercent||20,workMinutes:d.config.workMinutes||60,restMinutesMin:d.config.restMinutesMin||30,restMinutesMax:d.config.restMinutesMax||60})}else{setK12RotStatus(null)}}catch(e){setK12RotStatus(null);console.error("K12 fetch error:",e)}finally{setK12RotLoading(false)}};' +
-        'const k12RotToggle=async(enabled)=>{setK12RotSaving(true);try{let r=await fetch(__k12ApiBase+"/api/k12-rotation/toggle",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled})});if(r.ok)await k12RotFetch()}catch(e){alert("Failed: "+e.message)}finally{setK12RotSaving(false)}};' +
-        'const k12RotSaveCfg=async()=>{setK12RotSaving(true);try{let r=await fetch(__k12ApiBase+"/api/k12-rotation/config",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(k12RotCfg)});if(r.ok)await k12RotFetch();else alert("Save failed")}catch(e){alert("Failed: "+e.message)}finally{setK12RotSaving(false)}};' +
-        'const k12RotForce=async()=>{setK12RotSaving(true);try{await fetch(__k12ApiBase+"/api/k12-rotation/force",{method:"POST"});await new Promise(r=>setTimeout(r,3000));await k12RotFetch()}catch(e){alert("Failed: "+e.message)}finally{setK12RotSaving(false)}};' +
+        'const k12RotToggle=async(enabled)=>{setK12RotSaving(true);try{let r=await fetch(__k12ApiBase+"/api/k12-rotation/toggle",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled})});if(r.ok){await k12RotFetch();k12RotPageRefresh()}}catch(e){alert("Failed: "+e.message)}finally{setK12RotSaving(false)}};' +
+        'const k12RotSaveCfg=async()=>{setK12RotSaving(true);try{let r=await fetch(__k12ApiBase+"/api/k12-rotation/config",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(k12RotCfg)});if(r.ok){await k12RotFetch();k12RotPageRefresh()}else alert("Save failed")}catch(e){alert("Failed: "+e.message)}finally{setK12RotSaving(false)}};' +
+        'const k12RotForce=async()=>{setK12RotSaving(true);try{await fetch(__k12ApiBase+"/api/k12-rotation/force",{method:"POST"});await new Promise(r=>setTimeout(r,2500));await k12RotFetch();k12RotPageRefresh()}catch(e){alert("Failed: "+e.message)}finally{setK12RotSaving(false)}};' +
         funcAnchor;
 
     c = c.replace(funcAnchor, k12Funcs);
