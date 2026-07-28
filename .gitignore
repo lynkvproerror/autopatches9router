@@ -1,0 +1,20 @@
+# Ignore dependencies and build artifacts
+node_modules/
+automation/work/
+
+# Ignore runtime data and state files
+k12-rotation.json
+update-transaction.json
+machine-id
+cli-secret
+
+# Ignore log files and temporary backups
+*.log
+*.tmp
+*.bak
+
+# Ignore system / IDE folders
+.system_generated/
+.user_uploaded/
+.idea/
+.vscode/

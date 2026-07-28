@@ -1,0 +1,15 @@
+{
+  "port": 53220,
+  "bindHost": "0.0.0.0",
+  "healthHost": "127.0.0.1",
+  "dashboardPort": 20128,
+  "dashboardHost": "127.0.0.1",
+  "dashboardStartTimeoutSeconds": 480,
+  "dashboardFailureRetrySeconds": 600,
+  "updaterPort": 20129,
+  "monitorIntervalSeconds": 15,
+  "healthTimeoutSeconds": 5,
+  "startTimeoutSeconds": 20,
+  "updateCheckIntervalMinutes": 60,
+  "checkUpdateWhenStopped": true
+}

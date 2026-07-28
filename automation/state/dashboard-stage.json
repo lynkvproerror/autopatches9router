@@ -1,0 +1,12 @@
+{
+  "releaseId": "0.5.40-20260728-112247-314d601a",
+  "sourceVersion": "0.5.40",
+  "stageFingerprint": "8D7EE1880280CB6DA4BA98C5C67B3D80A6C0D4A8877FF1F00C186597A4E9C909",
+  "preparedAt": "2026-07-28T11:22:50.3078366+07:00",
+  "appRoot": "D:\\Music\\Ruby\\Produce for Customer\\Tools\\9router-patches\\automation\\work\\dashboard-stage\\releases\\0.5.40-20260728-112247-314d601a\\app",
+  "dataDir": "D:\\Music\\Ruby\\Produce for Customer\\Tools\\9router-patches\\automation\\work\\dashboard-stage\\releases\\0.5.40-20260728-112247-314d601a\\data",
+  "uiProbePath": "/_next/static/chunks/app/(dashboard)/dashboard/quota/page-c36e962e75b41c07.js",
+  "uiProbeHash": "7B5E11B5A397A1ECF27D1E305DB6AB672993209EF8CB043B0B915C617B07F02F",
+  "activatedAt": "2026-07-28T11:22:57.5910350+07:00",
+  "listenerPid": 51284
+}

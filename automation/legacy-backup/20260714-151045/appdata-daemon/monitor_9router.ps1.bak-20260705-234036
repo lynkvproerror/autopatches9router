@@ -1,0 +1,85 @@
+# monitor_9router.ps1
+$ErrorActionPreference = "SilentlyContinue"
+$LogFile = "C:\Users\Linh\AppData\Roaming\9router\daemon\daemon_log.txt"
+$TargetPort = 53220
+$HasOpenedBrowser = $false
+
+function Log-Message($Message) {
+    $Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $LogLine = "[$Timestamp] $Message"
+    Write-Output $LogLine
+    
+    # Limit log size to ~5MB to prevent filling up disk
+    if (Test-Path $LogFile) {
+        $size = (Get-Item $LogFile).Length
+        if ($size -gt 5MB) {
+            Clear-Content $LogFile
+            Add-Content -Path $LogFile -Value "[$Timestamp] Log cleared due to size limit (> 5MB)"
+        }
+    }
+    Add-Content -Path $LogFile -Value $LogLine
+}
+
+function Test-9RouterPort {
+    $tcpClient = New-Object System.Net.Sockets.TcpClient
+    try {
+        # Try to connect to the target port with a 2-second timeout
+        $connect = $tcpClient.BeginConnect("127.0.0.1", $TargetPort, $null, $null)
+        $wait = $connect.AsyncWaitHandle.WaitOne(2000, $false)
+        if (-not $wait) {
+            $tcpClient.Close()
+            return $false
+        }
+        $tcpClient.EndConnect($connect)
+        $tcpClient.Close()
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+Log-Message "9router Daemon Monitor started."
+
+while ($true) {
+    $isListening = Test-9RouterPort
+    if ($isListening) {
+        # Open browser to the dashboard ONLY ONCE when the monitor script starts up and server is ready
+        if (-not $HasOpenedBrowser) {
+            Log-Message "Server is active. Opening dashboard in browser..."
+            Start-Process "http://localhost:$TargetPort/dashboard/usage"
+            $HasOpenedBrowser = $true
+        }
+        
+        # 9router is running and listening, check again in 10 seconds
+        Start-Sleep -Seconds 10
+    } else {
+        Log-Message "9router is NOT listening on port $TargetPort. Starting 9router..."
+        
+        # Kill ONLY genuine 9router CLI wrapper or Next-server processes to avoid killing Codex kernels or other apps
+        Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" | ForEach-Object {
+            $cmd = $_.CommandLine
+            $isGenuine9Router = ($cmd -like "*node_modules\9router\cli.js*") -or ($cmd -like "*next-server*")
+            if ($isGenuine9Router) {
+                Log-Message "Found zombie 9router process (PID: $($_.ProcessId)). Terminating it."
+                Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+            }
+        }
+        
+        # Run 9router in tray mode (background), bind to port 53220, and skip update checks to prevent TUI menu loop exits
+        $proc = Start-Process -FilePath "node" -ArgumentList """C:\Users\Linh\AppData\Roaming\npm\node_modules\9router\cli.js"" -n -t -p $TargetPort --skip-update" -NoNewWindow -PassThru -ErrorAction SilentlyContinue
+        
+        if ($proc) {
+            Log-Message "Started 9router process (PID: $($proc.Id)). Waiting 8 seconds for it to initialize..."
+            Start-Sleep -Seconds 8
+            
+            if (Test-9RouterPort) {
+                Log-Message "9router is now successfully listening on port $TargetPort."
+            } else {
+                Log-Message "Warning: 9router process started (PID: $($proc.Id)) but port $TargetPort is not active yet. Will check again."
+            }
+        } else {
+            Log-Message "CRITICAL: Failed to start 9router process. Will retry in 10 seconds."
+            Start-Sleep -Seconds 10
+        }
+    }
+}

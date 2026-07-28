@@ -1,0 +1,2 @@
+Set WshShell = CreateObject("WScript.Shell")
+WshShell.Run "wscript.exe ""D:\Music\Ruby\Produce for Customer\Tools\9router-patches\automation\start-9router-hidden.vbs""", 0, False

@@ -1,0 +1,17 @@
+{
+  "schema": "api-patch-state-v2",
+  "version": "0.5.40",
+  "patchScriptHash": "4F47245E59FEF18E34A50D28D5B33465AECF41867199352E7FC8DB8623704EE1",
+  "targets": [
+    {
+      "path": "app/custom-server.js",
+      "hash": "B2BBA8152AD564270D24F871B40AD4E97863D479822B724476C845FA6E4333F2"
+    },
+    {
+      "path": "app/.next-cli-build/server/app/api/oauth/codex/bulk-import/route.js",
+      "hash": "066F841B4052D673E82B12F5CA6DC83652E7EA08329CEBAD93BDF02B31FE4BCF"
+    }
+  ],
+  "fingerprint": "055435B387370FFDB6C5EAA104E87C2142E353AA66849BABD042584F41A9359C",
+  "verifiedAt": "2026-07-28T11:22:21.0220586+07:00"
+}
