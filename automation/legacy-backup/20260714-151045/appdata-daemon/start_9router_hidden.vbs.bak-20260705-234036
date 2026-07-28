@@ -1,2 +1,0 @@
-Set WshShell = CreateObject("WScript.Shell")
-WshShell.Run "powershell -ExecutionPolicy Bypass -File ""C:\Users\Linh\AppData\Roaming\9router\daemon\monitor_9router.ps1""", 0, False

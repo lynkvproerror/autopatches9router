@@ -1,2 +1,0 @@
-Set WshShell = CreateObject("WScript.Shell")
-WshShell.Run "wscript.exe ""C:\Users\Linh\AppData\Roaming\9router\daemon\start_9router_hidden.vbs""", 0, False
