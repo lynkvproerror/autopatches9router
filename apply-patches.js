@@ -608,6 +608,8 @@ function patchQuotaPageBulk() {
         '        body:JSON.stringify({isActive:false})',
         '      })));',
         `      await b(${aliases.fetchAccounts},${aliases.page});`,
+        `      let __k12Hit=targets.some(e=>{let p=String(${aliases.quotaMap}[e.id]?.plan||"").toLowerCase();return p.includes("k12")});`,
+        '      if(__k12Hit&&typeof __9rSyncK12Rotation==="function")try{await __9rSyncK12Rotation(false,"K12 b\u1ecb t\u1eaft do h\u1ebft token 0%")}catch(_){}',
         '    }catch(err){console.error(err)}',
         `    finally{${aliases.busySetter}(false);}`,
         '  }',
@@ -629,6 +631,8 @@ function patchQuotaPageBulk() {
         '        body:JSON.stringify({isActive:true})',
         '      })));',
         `      await b(${aliases.fetchAccounts},${aliases.page});`,
+        `      let __k12Hit=targets.some(e=>{let p=String(${aliases.quotaMap}[e.id]?.plan||"").toLowerCase();return p.includes("k12")});`,
+        '      if(__k12Hit&&typeof __9rSyncK12Rotation==="function")try{await __9rSyncK12Rotation(true,"K12 \u0111\u01b0\u1ee3c b\u1eadt b\u1edfi Turn on Available")}catch(_){}',
         '    }catch(err){console.error(err)}',
         `    finally{${aliases.busySetter}(false);}`,
         '  }',
@@ -1298,7 +1302,9 @@ function patchSmartPrioritySort() {
         return true;
     }
 
-    const smartFunctions = currentMarker + ';function __9rBuildSmartPriorityPlan(accounts,quotaMap,options){' +
+    const smartFunctions = currentMarker + ';' +
+        'const __9rSyncK12Rotation=async(shouldEnable,reason)=>{try{let base="http://"+(window.location?window.location.hostname:"127.0.0.1")+":53220";let r=await fetch(base+"/api/k12-rotation/status");if(!r.ok)return;let s=await r.json();if(!shouldEnable&&s.enabled){await fetch(base+"/api/k12-rotation/toggle",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled:false})});alert("\u26a0\ufe0f K12 Rotation Engine \u0111\u00e3 t\u1ef1 \u0111\u1ed9ng t\u1eaft"+(reason?" \u2014 "+reason:""));if(typeof k12RotFetch==="function")try{k12RotFetch()}catch(_){}}else if(shouldEnable&&!s.enabled){if(confirm("K12 Rotation Engine \u0111ang t\u1eaft. B\u1ea1n v\u1eeba b\u1eadt K12 \u2014 b\u1eadt l\u1ea1i K12 Rotation Engine?")){await fetch(base+"/api/k12-rotation/toggle",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled:true})});if(typeof k12RotFetch==="function")try{k12RotFetch()}catch(_){}}}}catch(_){}};' +
+        'function __9rBuildSmartPriorityPlan(accounts,quotaMap,options){' +
         'let opts=options||{};' +
         'let normPlan=p=>{if(!p)return"unknown";let l=String(p).toLowerCase().trim();if(l.includes("premium")||l.includes("ultra"))return"ultra";if(l.includes("pro"))return"pro";if(l.includes("plus"))return"plus";if(l.includes("team"))return"team";if(l.includes("enterprise"))return"enterprise";if(l.includes("k12"))return"k12";if(l.includes("free"))return"free";if(!l||l==="unknown")return"unknown";return l};' +
         'let quotaPct=q=>{if(!q)return null;let pct=null;if(q.remaining!==undefined)pct=Number(q.remaining);else if(q.remainingPercentage!==undefined)pct=Number(q.remainingPercentage);else if(q.total&&q.total>0)pct=(q.total-q.used)/q.total*100;if(!Number.isFinite(pct))return null;return Math.max(0,Math.min(100,Math.round(pct)))};' +
@@ -1345,7 +1351,8 @@ function patchSmartPrioritySort() {
         'setSmartPriResult("Updating "+smartPlan.length+" accounts...");' +
         'await __9rRunQuotaPool(smartPlan,async item=>{try{let res=await fetch("/api/providers/"+item.id,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({isActive:item.isActive,priority:item.priority})});if(res.ok)ok++;else fail++}catch(err){fail++}},8);' +
         'setSmartPriResult("Done: "+ok+" updated, "+fail+" failed, "+skipped+" unknown plans skipped, "+smartPopulation.quotaFailures+" quota fetches failed.");' +
-        `await b(${aliases.fetchAccounts},${aliases.page})` +
+        `await b(${aliases.fetchAccounts},${aliases.page});` +
+        'if(smartPriActivation==="preferred-only"){await __9rSyncK12Rotation(smartPriPlan==="k12",smartPriPlan==="k12"?"K12 \u0111\u01b0\u1ee3c \u01b0u ti\u00ean b\u1edfi Smart Priority":"Smart Priority \u0111\u00e3 t\u1eaft K12 (\u01b0u ti\u00ean "+smartPriPlan.toUpperCase()+")")}' +
         '}catch(err){setSmartPriResult("Failed: "+(err.message||String(err)));alert(err.message||String(err))}' +
         `finally{${aliases.busySetter}(false);setSmartPriLoading(false)}` +
         '};' +
@@ -1501,7 +1508,8 @@ function patchBulkToggleByPlan() {
         'try{let res=await fetch("/api/providers/"+item.id,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({isActive:!isDeactivate})});' +
         'if(res.ok)ok++;else fail++}catch(err){fail++}},8);' +
         'setPlanToggleResult("Done: "+ok+" updated, "+fail+" failed");' +
-        `await b(${aliases.fetchAccounts},${aliases.page})` +
+        `await b(${aliases.fetchAccounts},${aliases.page});` +
+        'if(planToggleTarget==="k12"&&ok>0){await __9rSyncK12Rotation(planToggleAction==="activate",planToggleAction==="deactivate"?"Bulk Toggle \u0111\u00e3 t\u1eaft K12":"Bulk Toggle \u0111\u00e3 b\u1eadt K12")}' +
         '}catch(err){setPlanToggleResult("Failed: "+(err.message||String(err)))}' +
         `finally{setPlanToggleLoading(false);${aliases.busySetter}(false)}` +
         '};' +
