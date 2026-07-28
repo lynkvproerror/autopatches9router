@@ -887,18 +887,20 @@ function Invoke-PatchSet {
     & $NodeExe $PatchScript --scope $Scope --app-root $AppRoot | Out-Host
     if ($LASTEXITCODE -ne 0) { throw "Patch runner failed with exit code $LASTEXITCODE" }
 
-    $tests = @($AutomationTest, $DashboardStagingTest, $ApiGatewayTest)
-    $tests += $BulkImportNormalizerTest
+    $tests = @($AutomationTest, $DashboardStagingTest, $ApiGatewayTest, $BulkImportNormalizerTest)
     if ($Scope -in @("all", "dashboard")) { $tests += $PatchTest }
-    $previousAppRoot = $env:NINE_ROUTER_APP
-    $hadPreviousAppRoot = Test-Path Env:NINE_ROUTER_APP
-    try {
-        $env:NINE_ROUTER_APP = $AppRoot
-        & $NodeExe --test $tests | Out-Host
-        if ($LASTEXITCODE -ne 0) { throw "Patch validation failed with exit code $LASTEXITCODE" }
-    } finally {
-        if ($hadPreviousAppRoot) { $env:NINE_ROUTER_APP = $previousAppRoot }
-        else { Remove-Item Env:NINE_ROUTER_APP -ErrorAction SilentlyContinue }
+    $existingTests = $tests | Where-Object { Test-Path -LiteralPath $_ }
+    if ($existingTests.Count -gt 0) {
+        $previousAppRoot = $env:NINE_ROUTER_APP
+        $hadPreviousAppRoot = Test-Path Env:NINE_ROUTER_APP
+        try {
+            $env:NINE_ROUTER_APP = $AppRoot
+            & $NodeExe --test $existingTests | Out-Host
+            if ($LASTEXITCODE -ne 0) { throw "Patch validation failed with exit code $LASTEXITCODE" }
+        } finally {
+            if ($hadPreviousAppRoot) { $env:NINE_ROUTER_APP = $previousAppRoot }
+            else { Remove-Item Env:NINE_ROUTER_APP -ErrorAction SilentlyContinue }
+        }
     }
     Write-ControlLog "Patch scope '$Scope' and regression tests passed."
 }
