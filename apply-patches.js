@@ -226,8 +226,29 @@ function patchQuotaPage() {
     }
     
     const quotaAliases = getQuotaBundleAliases(c);
-    const refreshReady = c.includes(`setInterval(()=>{${quotaAliases.refreshCallback}()},3e5)`) &&
-        c.includes(`setInterval(()=>${quotaAliases.refreshCallback}(),3e5)`) &&
+
+    // Guard auto-refresh interval: skip if refreshBusy to prevent stale generation cancel
+    const refreshGuards = [
+        [
+            `setInterval(()=>{${quotaAliases.refreshCallback}()},3e5)`,
+            `setInterval(()=>{if(!${quotaAliases.refreshBusy})${quotaAliases.refreshCallback}();else ${quotaAliases.countdownSetter}(300)},3e5)`,
+            'Auto-refresh guard (main)'
+        ],
+        [
+            `setInterval(()=>${quotaAliases.refreshCallback}(),3e5)`,
+            `setInterval(()=>{if(!${quotaAliases.refreshBusy})${quotaAliases.refreshCallback}();else ${quotaAliases.countdownSetter}(300)},3e5)`,
+            'Auto-refresh guard (visibility)'
+        ],
+    ];
+    for (const [from, to, desc] of refreshGuards) {
+        if (c.includes(from)) {
+            c = c.split(from).join(to);
+            console.log(`  ✅ ${desc}`);
+            changed = true;
+        }
+    }
+
+    const refreshReady = c.includes(`setInterval(()=>{if(!${quotaAliases.refreshBusy})${quotaAliases.refreshCallback}()`) &&
         c.includes(`${quotaAliases.countdownSetter}(300)`);
     if (!refreshReady) { console.log('  ✗ Client quota refresh timing is not fully patched'); return false; }
     if (changed) fs.writeFileSync(file, c, 'utf8');
