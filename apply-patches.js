@@ -29,8 +29,10 @@ const BUILD = BASE ? path.join(BASE, '.next-cli-build') : null;
 
 function getQuotaBundleAliases(content) {
     if (content.includes('[eM,eO]=(0,i.useState)(1)')) {
+        // Detect loadingSetter: v0.5.40 uses 'z', v0.5.45 uses 'L'
+        const loadingSetter = content.includes('eB=(0,i.useCallback)(async(e,t)=>{L(t=>') ? 'L' : 'z';
         return {
-            react: 'i', list: 'e8', quotaMap: 'I', quotaSetter: '_', loadingSetter: 'z', errorSetter: 'R',
+            react: 'i', list: 'e8', quotaMap: 'I', quotaSetter: '_', loadingSetter, errorSetter: 'R',
             busy: 'eD', busySetter: 'eT', fetchAccounts: 'eV', fetchQuota: 'eB', page: 'eM', pageSetter: 'eO',
             toggle: 'e9', emptyPredicate: 'e6', statusFilter: 'ef', bulkLabel: 'e7', displayName: 'D',
             sortDeps: '[r,I,e$,ef,eN]', refreshBusy: 'Q', refreshBusySetter: 'Y', initialLoadingSetter: 'et',
