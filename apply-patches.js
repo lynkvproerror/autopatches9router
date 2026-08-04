@@ -74,33 +74,89 @@ function patchBulkImport() {
         console.log('  → Already patched'); return true;
     }
 
-    const target = '!Array.isArray(c)||0===c.length)return e.NextResponse.json({error:"No accounts provided"},{status:400});let d=[],h=0,i=0;';
-    const legacyNormalizerV1 = 'Array.isArray(c)&&(c=c.map(function(item){if(!item||"object"!=typeof item||Array.isArray(item))return item;if(item.credentials&&item.credentials.access_token';
-    const legacyNormalizerV2 = '/*__9router_bulk_import_normalizer_v2__*/';
-    const normalizer = '/*__9router_bulk_import_normalizer_v3__*/if(c&&"object"==typeof c&&!Array.isArray(c))c=[c];Array.isArray(c)&&(c=c.map(function(item){if(!item||"object"!=typeof item||Array.isArray(item))return item;var meta=item._meta||{};if(item.tokens&&item.tokens.access_token&&!item.accessToken){var tk=item.tokens;return{accessToken:tk.access_token||"",refreshToken:tk.refresh_token||tk.refreshToken||item.refresh_token||item.refreshToken||void 0,idToken:tk.id_token||tk.idToken||item.id_token||item.idToken||void 0,email:item.email||tk.email||meta.email||"",expiresAt:__9routerNormalizeExpiry(item.expires_at||item.expiresAt||item.expired),lastRefreshAt:item.last_refresh||item.lastRefreshAt||void 0,providerSpecificData:{chatgptAccountId:tk.account_id||item.account_id||"",chatgptPlanType:meta.plan_type||item.plan_type||item.chatgpt_plan_type||""}}}if(item.credentials&&item.credentials.access_token&&!item.accessToken){var cr=item.credentials,ex=item.extra||{};return{accessToken:cr.access_token||"",refreshToken:cr.refresh_token||void 0,idToken:cr.id_token||cr.idToken||void 0,sessionToken:cr.session_token||cr.sessionToken||void 0,email:cr.email||ex.email||meta.email||"",expiresAt:__9routerNormalizeExpiry(cr.expires_at||cr.expiresAt),lastRefreshAt:cr.last_refresh||cr.lastRefreshAt||void 0,providerSpecificData:{chatgptAccountId:ex.source_target_id||cr.chatgpt_account_id||cr.account_id||"",chatgptPlanType:cr.plan_type||cr.chatgpt_plan_type||meta.plan_type||item.plan_type||""}}}if(item.access_token&&!item.accessToken){var flatExpiry=item.expires_at||item.expiresAt||item.expired;return{accessToken:item.access_token||"",refreshToken:item.refresh_token||item.refreshToken||void 0,idToken:item.id_token||item.idToken||void 0,sessionToken:item.session_token||item.sessionToken||void 0,email:item.email||meta.email||"",expiresAt:__9routerNormalizeExpiry(flatExpiry),lastRefreshAt:item.last_refresh||item.lastRefreshAt||void 0,providerSpecificData:item.providerSpecificData||{chatgptAccountId:item.chatgpt_account_id||item.account_id||"",chatgptPlanType:item.chatgpt_plan_type||meta.plan_type||item.plan_type||""}}}if(!item.accessToken&&item.token)return{accessToken:item.token||"",refreshToken:item.refresh_token||item.refreshToken||void 0,idToken:item.id_token||item.idToken||void 0,sessionToken:item.session_token||item.sessionToken||void 0,email:item.email||meta.email||"",expiresAt:__9routerNormalizeExpiry(item.expiresAt||item.expires_at||item.expired),lastRefreshAt:item.last_refresh||item.lastRefreshAt||void 0,providerSpecificData:item.providerSpecificData||{}};return item})),';
+    // v0.5.45 uses comma operator inside if(): if(c=...:null, !Array.isArray(c)||...)
+    // Normalizer must be a comma expression (no var/let/const declarations)
+    const commaTarget = ',!Array.isArray(c)||0===c.length)return e.NextResponse.json({error:"No accounts provided"},{status:400});let d=[],h=0,i=0;';
+    // Legacy: v0.5.40 used statement-level target (no comma operator in if)
+    const stmtTarget = '!Array.isArray(c)||0===c.length)return e.NextResponse.json({error:"No accounts provided"},{status:400});let d=[],h=0,i=0;';
 
-    // Remove any legacy normalizer (v1 or v2) before inserting v3
-    if (c.includes(legacyNormalizerV2)) {
-        // Find the full v2 block from marker to the end of the normalizer (ends with "})),")
-        const v2Start = c.indexOf(legacyNormalizerV2);
+    // Remove any legacy normalizer (v1 or v2)
+    const legacyV2 = '/*__9router_bulk_import_normalizer_v2__*/';
+    const legacyV1 = 'Array.isArray(c)&&(c=c.map(function(item){if(!item||"object"!=typeof item||Array.isArray(item))return item;if(item.credentials&&item.credentials.access_token';
+    const expiryHelper = 'var __9routerNormalizeExpiry=function(value){if(null==value||""===value)return void 0;if("number"==typeof value){var numericDate=new Date(value*1000);return isNaN(numericDate.getTime())?void 0:numericDate.toISOString()}var parsedDate=new Date(value);return isNaN(parsedDate.getTime())?value:parsedDate.toISOString()};';
+    if (c.includes(legacyV2)) {
+        const v2Start = c.indexOf(legacyV2);
         const v2End = c.indexOf('})),' , v2Start) + 4;
         c = c.substring(0, v2Start) + c.substring(v2End);
-        // Also remove the expiry helper if left behind
-        const expiryHelper = 'var __9routerNormalizeExpiry=function(value){if(null==value||""===value)return void 0;if("number"==typeof value){var numericDate=new Date(value*1000);return isNaN(numericDate.getTime())?void 0:numericDate.toISOString()}var parsedDate=new Date(value);return isNaN(parsedDate.getTime())?value:parsedDate.toISOString()};';
-        c = c.replace(expiryHelper, '');
-    } else if (c.includes(legacyNormalizerV1)) {
-        const v1Start = c.indexOf(legacyNormalizerV1);
+        c = c.split(expiryHelper).join('');
+    } else if (c.includes(legacyV1)) {
+        const v1Start = c.indexOf(legacyV1);
         const v1End = c.indexOf('})),' , v1Start) + 4;
         c = c.substring(0, v1Start) + c.substring(v1End);
     }
 
-    const expiryHelperCode = 'var __9routerNormalizeExpiry=function(value){if(null==value||""===value)return void 0;if("number"==typeof value){var numericDate=new Date(value*1000);return isNaN(numericDate.getTime())?void 0:numericDate.toISOString()}var parsedDate=new Date(value);return isNaN(parsedDate.getTime())?value:parsedDate.toISOString()};';
-    if (!c.includes(target)) { console.log('  ✗ Target pattern not found'); return false; }
+    // Normalizer as comma expression (no var declarations — uses IIFE for meta)
+    const normalizerExpr =
+        'Array.isArray(c)&&(c=c.map(function(item){' +
+        'if(!item||"object"!=typeof item||Array.isArray(item))return item;' +
+        'var meta=item._meta||{};' +
+        'if(item.tokens&&item.tokens.access_token&&!item.accessToken){' +
+        'var tk=item.tokens;return{' +
+        'accessToken:tk.access_token||"",' +
+        'refreshToken:tk.refresh_token||tk.refreshToken||item.refresh_token||item.refreshToken||void 0,' +
+        'idToken:tk.id_token||tk.idToken||item.id_token||item.idToken||void 0,' +
+        'email:item.email||tk.email||meta.email||"",' +
+        'expiresAt:item.expires_at||item.expiresAt||void 0,' +
+        'lastRefreshAt:item.last_refresh||item.lastRefreshAt||void 0,' +
+        'providerSpecificData:{chatgptAccountId:tk.account_id||item.account_id||"",' +
+        'chatgptPlanType:meta.plan_type||item.plan_type||item.chatgpt_plan_type||""}}}' +
+        'if(item.credentials&&item.credentials.access_token&&!item.accessToken){' +
+        'var cr=item.credentials,ex=item.extra||{};return{' +
+        'accessToken:cr.access_token||"",' +
+        'refreshToken:cr.refresh_token||void 0,' +
+        'idToken:cr.id_token||cr.idToken||void 0,' +
+        'email:cr.email||ex.email||meta.email||"",' +
+        'expiresAt:cr.expires_at||cr.expiresAt||void 0,' +
+        'lastRefreshAt:cr.last_refresh||cr.lastRefreshAt||void 0,' +
+        'providerSpecificData:{chatgptAccountId:ex.source_target_id||cr.chatgpt_account_id||cr.account_id||"",' +
+        'chatgptPlanType:cr.plan_type||cr.chatgpt_plan_type||meta.plan_type||item.plan_type||""}}}' +
+        'if(item.access_token&&!item.accessToken){return{' +
+        'accessToken:item.access_token||"",' +
+        'refreshToken:item.refresh_token||item.refreshToken||void 0,' +
+        'idToken:item.id_token||item.idToken||void 0,' +
+        'email:item.email||meta.email||"",' +
+        'expiresAt:item.expires_at||item.expiresAt||void 0,' +
+        'lastRefreshAt:item.last_refresh||item.lastRefreshAt||void 0,' +
+        'providerSpecificData:item.providerSpecificData||{chatgptAccountId:item.chatgpt_account_id||item.account_id||"",' +
+        'chatgptPlanType:item.chatgpt_plan_type||meta.plan_type||item.plan_type||""}}}' +
+        'if(!item.accessToken&&item.token)return{' +
+        'accessToken:item.token||"",' +
+        'refreshToken:item.refresh_token||item.refreshToken||void 0,' +
+        'idToken:item.id_token||item.idToken||void 0,' +
+        'email:item.email||meta.email||"",' +
+        'expiresAt:item.expiresAt||item.expires_at||void 0,' +
+        'lastRefreshAt:item.last_refresh||item.lastRefreshAt||void 0,' +
+        'providerSpecificData:item.providerSpecificData||{}};' +
+        'return item}))/*__9router_bulk_import_normalizer_v3__*/';
 
-    c = c.replace(target, expiryHelperCode + normalizer + target);
-    fs.writeFileSync(file, c, 'utf8');
-    console.log('  ✅ Patched: v3 credential normalizer');
-    return true;
+    // v0.5.45 pattern: inject as comma expression inside if()
+    if (c.includes(commaTarget)) {
+        c = c.replace(commaTarget, ',' + normalizerExpr + ',!Array.isArray(c)||0===c.length)return e.NextResponse.json({error:"No accounts provided"},{status:400});let d=[],h=0,i=0;');
+        fs.writeFileSync(file, c, 'utf8');
+        console.log('  ✅ Patched: v3 credential normalizer (comma expression)');
+        return true;
+    }
+
+    // v0.5.40 pattern: inject as statement before if()
+    if (c.includes(stmtTarget)) {
+        c = c.replace(stmtTarget, normalizerExpr + ',' + stmtTarget);
+        fs.writeFileSync(file, c, 'utf8');
+        console.log('  ✅ Patched: v3 credential normalizer');
+        return true;
+    }
+
+    console.log('  ✗ Target pattern not found');
+    return false;
 }
 
 // ============================================================
