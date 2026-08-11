@@ -7,6 +7,13 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { PATCH_MARKER: MODEL_ACCOUNT_TIER_MARKER, patchCredentialSelectorContent } = require('./model-account-routing');
+const {
+    getModernProviderDetailAnchors,
+    getPatchedProviderDetailTarget,
+    isModernProviderAutoPingPatched,
+    isProviderDetailBulkPatched,
+} = require('./provider-detail-patch');
 
 const args = process.argv.slice(2);
 const getArgValue = name => {
@@ -453,6 +460,11 @@ function patchAutoPingEnable() {
         'T(!1)}'
     ].join('');
 
+    if (isModernProviderAutoPingPatched(c)) {
+        console.log('  → Already patched');
+        return true;
+    }
+
     if (c.includes('Auto-ping enable error')) {
         const start = c.indexOf('tT=async()=>{');
         const endMarker = 'Auto-ping enable error:",e)}T(!1)}';
@@ -472,14 +484,14 @@ function patchAutoPingEnable() {
         return true;
     }
 
-    // 0.5.40 moved provider success callbacks and AutoPing state into a new bundle layout.
-    const modernSuccess = 'tI=()=>{tj(),O(!1)}';
-    if (c.includes(modernSuccess)) {
+    // 0.5.40+ keeps the same flow but minifier aliases can change between releases.
+    const modernAnchors = getModernProviderDetailAnchors(c);
+    if (modernAnchors) {
         const modernHelper = [
             '__9rEnableProviderAutoPing=async()=>{',
-            'await tj();',
+            `await ${modernAnchors.refreshAlias}();`,
             'try{',
-            `if(M[${providerId}]){`,
+            `if(${modernAnchors.autoPingMapAlias}[${providerId}]){`,
             'let __9rProvidersResponse=await fetch("/api/providers",{cache:"no-store"}),',
             '__9rProviderData=await __9rProvidersResponse.json(),',
             `__9rConnections=(__9rProviderData.connections||[]).filter(e=>e.provider===${providerId}&&"oauth"===e.authType),`,
@@ -490,25 +502,29 @@ function patchAutoPingEnable() {
             '}catch(e){console.log("Auto-ping enable error:",e)}',
             '}',
         ].join('');
-        const modernReplacement = modernHelper + ',tI=async()=>{await __9rEnableProviderAutoPing();O(!1)}';
-        c = c.replace(modernSuccess, modernReplacement);
+        const modernReplacement = modernHelper + ',' + modernAnchors.patchedSuccessSource;
+        c = c.replace(modernAnchors.successSource, modernReplacement);
 
-        const saveSuccess = 'if(t.ok){await tj(),z(!1);return}';
-        if (c.includes(saveSuccess)) {
-            c = c.replace(saveSuccess, 'if(t.ok){await __9rEnableProviderAutoPing(),z(!1);return}');
+        if (c.includes(modernAnchors.saveSuccessSource)) {
+            c = c.replace(modernAnchors.saveSuccessSource, modernAnchors.patchedSaveSuccessSource);
         }
 
-        const bulkSuccess = `"codex"===${providerId}&&(0,i.jsx)(K,{isOpen:J,onClose:()=>W(!1),onSuccess:tj})`;
-        if (c.includes(bulkSuccess)) {
-            c = c.replace(
-                bulkSuccess,
-                `"codex"===${providerId}&&(0,i.jsx)(K,{isOpen:J,onClose:()=>W(!1),onSuccess:async()=>{await __9rEnableProviderAutoPing();W(!1)}})`,
+        const identifier = '([A-Za-z_$][\\w$]*)';
+        const bulkSuccessPattern = new RegExp(
+            `"codex"===${providerId}&&\\(0,${identifier}\\.jsx\\)\\(${identifier},\\{isOpen:${identifier},onClose:\\(\\)=>${identifier}\\(!1\\),onSuccess:${modernAnchors.refreshAlias}\\}\\)`,
+        );
+        const bulkSuccessMatch = c.match(bulkSuccessPattern);
+        if (bulkSuccessMatch) {
+            const [bulkSuccess, jsxAlias, componentAlias, isOpenAlias, closeSetter] = bulkSuccessMatch;
+            c = c.replace(bulkSuccess,
+                `"codex"===${providerId}&&(0,${jsxAlias}.jsx)(${componentAlias},{isOpen:${isOpenAlias},onClose:()=>${closeSetter}(!1),onSuccess:async()=>{await __9rEnableProviderAutoPing();${closeSetter}(!1)}})`,
             );
         }
 
         const modernReady = c.includes('__9rEnableProviderAutoPing=async()=>{') &&
             c.includes('await tC(__9rPing)') &&
-            c.includes('onSuccess:async()=>{await __9rEnableProviderAutoPing();W(!1)}');
+            c.includes(modernAnchors.patchedSaveSuccessSource) &&
+            c.includes('onSuccess:async()=>{await __9rEnableProviderAutoPing();');
         if (!modernReady) {
             console.log('  ✗ Modern AutoPing layout could not be patched completely');
             return false;
@@ -795,7 +811,7 @@ function patchDetailPageBulk() {
                 upgraded = true;
             }
         }
-        if (!c.includes('children:"Tắt 0% token"') || !c.includes('const session=qList.find(')) {
+        if (!isProviderDetailBulkPatched(c)) {
             console.log('  ✗ Existing provider detail bulk patch could not be upgraded');
             return false;
         }
@@ -806,17 +822,18 @@ function patchDetailPageBulk() {
     
     const targetSearch = 'Auto-ping enable error:",e)}T(!1)},tO=async e=>{';
     if (!c.includes(targetSearch)) {
-        const modernTarget = ',tI=async()=>{await __9rEnableProviderAutoPing();O(!1)},tD=async e=>{';
+        const modernTargetInfo = getPatchedProviderDetailTarget(c);
         const connectionsMatch = c.match(/,([A-Za-z_$][\w$]*)=([A-Za-z_$][\w$]*)\.filter\(e=>[A-Za-z_$][\w$]*\.includes\(e\.id\)\),[A-Za-z_$][\w$]*=\2\.length>0/);
         const modernButtonPattern = new RegExp(
             `"codex"===${providerId}&&\\(0,([A-Za-z_$][\\w$]*)\\.jsx\\)\\(([A-Za-z_$][\\w$]*)\\.\\$n,\\{size:"sm",icon:"playlist_add",variant:"secondary",onClick:\\(\\)=>[A-Za-z_$][\\w$]*\\(!0\\),children:\\(0,[A-Za-z_$][\\w$]*\\.Tl\\)\\("Bulk Add"\\)\\}\\)`,
         );
         const modernButtonMatch = c.match(modernButtonPattern);
-        if (!c.includes(modernTarget) || !connectionsMatch || !modernButtonMatch) {
+        if (!modernTargetInfo || !connectionsMatch || !modernButtonMatch) {
             console.log('  ✗ Target functions pattern not found');
             return false;
         }
 
+        const modernTarget = modernTargetInfo.source;
         const connections = connectionsMatch[2];
         const modernFuncs = [
             ',__9rFetchAllQuotas=async conns=>{',
@@ -1822,6 +1839,49 @@ function patchK12RotationEngine() {
 }
 
 // ============================================================
+// PATCH 28: Route Sol/Terra to dedicated Codex account tiers
+// ============================================================
+function patchModelAccountTierRouting() {
+    console.log('[PATCH 28] Model-to-account tier routing');
+
+    const chunksDir = path.join(BUILD, 'server/chunks');
+    if (!fs.existsSync(chunksDir)) { console.log('  ✗ Server chunks dir not found'); return false; }
+
+    const matches = [];
+    for (const name of fs.readdirSync(chunksDir).filter(name => name.endsWith('.js'))) {
+        const file = path.join(chunksDir, name);
+        const content = fs.readFileSync(file, 'utf8');
+        let result;
+        try {
+            result = patchCredentialSelectorContent(content);
+        } catch (error) {
+            console.log(`  ✗ ${name}: ${error.message}`);
+            return false;
+        }
+        if (result.matched) matches.push({ file, name, ...result });
+    }
+
+    if (matches.length !== 1) {
+        console.log(`  ✗ Expected one credential selector chunk, found ${matches.length}`);
+        return false;
+    }
+
+    const target = matches[0];
+    if (!target.content.includes(MODEL_ACCOUNT_TIER_MARKER)) {
+        console.log('  ✗ Patched selector marker is missing');
+        return false;
+    }
+    if (!target.changed) {
+        console.log(`  → Already patched in ${target.name}`);
+        return true;
+    }
+
+    fs.writeFileSync(target.file, target.content, 'utf8');
+    console.log(`  ✅ Enforced Sol=Plus+ and Terra=Free/Go/K12 in ${target.name}`);
+    return true;
+}
+
+// ============================================================
 // PATCH 25: K12 Rotation Dashboard UI
 // ============================================================
 function patchK12RotationDashboard() {
@@ -2625,12 +2685,13 @@ const PATCH_DEFINITIONS = [
     { id: 1, name: 'Bulk Import', scope: 'api', targets: ['server/app/api/oauth/codex/bulk-import/route.js'], run: patchBulkImport },
     { id: 18, name: 'API UI Redirect', scope: 'api', targets: ['custom-server.js'], run: patchApiDashboardRedirect },
     { id: 24, name: 'K12 Engine', scope: 'api', targets: ['custom-server.js'], run: patchK12RotationEngine },
+    { id: 28, name: 'Model Tier Routing', scope: 'api', targets: ['server/chunks/*.js'], sources: ['model-account-routing.js'], run: patchModelAccountTierRouting },
     { id: 2, name: 'Providers', scope: 'dashboard', targets: ['static/chunks/app/(dashboard)/dashboard/providers/page-*.js'], run: patchProvidersPage },
     { id: 3, name: 'Quota', scope: 'dashboard', targets: ['static/chunks/app/(dashboard)/dashboard/quota/page-*.js', 'server/app/(dashboard)/dashboard/quota/page.js'], run: patchQuotaPage },
     { id: 19, name: 'Quota Pagination', scope: 'dashboard', targets: ['static/chunks/app/(dashboard)/dashboard/quota/page-*.js', 'server/app/(dashboard)/dashboard/quota/page.js'], run: patchQuotaPaginationNormalization },
-    { id: 4, name: 'AutoPing', scope: 'dashboard', targets: ['static/chunks/app/(dashboard)/dashboard/providers/[id]/page-*.js'], run: patchAutoPingEnable },
+    { id: 4, name: 'AutoPing', scope: 'dashboard', targets: ['static/chunks/app/(dashboard)/dashboard/providers/[id]/page-*.js'], sources: ['provider-detail-patch.js'], run: patchAutoPingEnable },
     { id: 5, name: 'Quota Bulk', scope: 'dashboard', targets: ['static/chunks/app/(dashboard)/dashboard/quota/page-*.js'], run: patchQuotaPageBulk },
-    { id: 6, name: 'Detail Bulk', scope: 'dashboard', targets: ['static/chunks/app/(dashboard)/dashboard/providers/[id]/page-*.js'], run: patchDetailPageBulk },
+    { id: 6, name: 'Detail Bulk', scope: 'dashboard', targets: ['static/chunks/app/(dashboard)/dashboard/providers/[id]/page-*.js'], sources: ['provider-detail-patch.js'], run: patchDetailPageBulk },
     { id: 7, name: 'Weekly Filter', scope: 'dashboard', targets: ['static/chunks/app/(dashboard)/dashboard/quota/page-*.js'], run: patchQuotaPageWeeklyFilter },
     { id: 22, name: 'Session Filter', scope: 'dashboard', targets: ['static/chunks/app/(dashboard)/dashboard/quota/page-*.js'], run: patchQuotaPageSessionFilter },
     { id: 8, name: 'Plan Badge', scope: 'dashboard', targets: ['static/chunks/app/(dashboard)/dashboard/quota/page-*.js'], run: patchQuotaPlanBadge },
@@ -2658,12 +2719,19 @@ if (requestedScopeHash) {
     } else {
         const payload = PATCH_DEFINITIONS
             .filter(definition => definition.scope === requestedScopeHash && !definition.experimental)
-            .map(definition => JSON.stringify({
-                id: definition.id,
-                name: definition.name,
-                scope: definition.scope,
-                targets: definition.targets,
-            }) + '\n' + definition.run.toString())
+            .map(definition => {
+                const sourcePayload = (definition.sources || []).map(source => {
+                    const sourceFile = path.join(__dirname, source);
+                    return `\nSOURCE:${source}\n${fs.readFileSync(sourceFile, 'utf8')}`;
+                }).join('');
+                return JSON.stringify({
+                    id: definition.id,
+                    name: definition.name,
+                    scope: definition.scope,
+                    targets: definition.targets,
+                    sources: definition.sources || [],
+                }) + '\n' + definition.run.toString() + sourcePayload;
+            })
             .join('\n---\n');
         console.log(crypto.createHash('sha256').update(payload).digest('hex').toUpperCase());
     }
