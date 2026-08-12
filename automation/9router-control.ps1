@@ -39,6 +39,9 @@ $BulkImportNormalizerTest = Join-Path $PatchRoot "bulk-import-normalizer.test.js
 $AutomationTest = Join-Path $PatchRoot "automation.test.js"
 $DashboardStagingTest = Join-Path $PatchRoot "dashboard-staging.test.js"
 $ApiGatewayTest = Join-Path $PatchRoot "api-gateway.test.js"
+$ModelAccountRoutingTest = Join-Path $PatchRoot "model-account-routing.test.js"
+$ProviderDetailPatchTest = Join-Path $PatchRoot "provider-detail-patch.test.js"
+$UpdateShimCutoverTest = Join-Path $PatchRoot "update-shim-cutover.test.js"
 $StartupFile = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup\9router.vbs"
 $HiddenLauncher = Join-Path $AutomationRoot "start-9router-hidden.vbs"
 $RouterRoot = Join-Path $env:APPDATA "npm\node_modules\9router"
@@ -887,7 +890,7 @@ function Invoke-PatchSet {
     & $NodeExe $PatchScript --scope $Scope --app-root $AppRoot | Out-Host
     if ($LASTEXITCODE -ne 0) { throw "Patch runner failed with exit code $LASTEXITCODE" }
 
-    $tests = @($AutomationTest, $DashboardStagingTest, $ApiGatewayTest, $BulkImportNormalizerTest)
+    $tests = @($AutomationTest, $DashboardStagingTest, $ApiGatewayTest, $BulkImportNormalizerTest, $ModelAccountRoutingTest, $ProviderDetailPatchTest, $UpdateShimCutoverTest)
     if ($Scope -in @("all", "dashboard")) { $tests += $PatchTest }
     $existingTests = $tests | Where-Object { Test-Path -LiteralPath $_ }
     if ($existingTests.Count -gt 0) {
@@ -1059,6 +1062,24 @@ function Backup-GlobalInstall {
     return $transaction
 }
 
+function Remove-ManagedCommandShimsForNpmInstall {
+    param([object]$Transaction)
+
+    if (-not $Transaction -or $Transaction.phase -notin @("backup-complete", "installing")) {
+        throw "Managed npm shims can only be released after a rollback snapshot exists."
+    }
+    $manifestNames = @($Transaction.shims | ForEach-Object { [string]$_.name })
+    foreach ($name in @("9router", "9router.cmd", "9router.ps1")) {
+        if ($name -notin $manifestNames) {
+            throw "Rollback manifest is missing managed npm shim '$name'."
+        }
+        $livePath = Join-Path $GlobalPrefix $name
+        if (Test-Path -LiteralPath $livePath) { Remove-Item -LiteralPath $livePath -Force }
+        if (Test-Path -LiteralPath $livePath) { throw "Managed npm shim remained locked: $livePath" }
+    }
+    Write-ControlLog "Released snapshotted 9router command shims for npm package installation."
+}
+
 function Restore-GlobalInstallExact {
     param([object]$Transaction)
 
@@ -1150,6 +1171,7 @@ function Commit-PreparedUpdate {
     $transaction = Backup-GlobalInstall -Prepared $Prepared
     try {
         Set-TransactionPhase -Transaction $transaction -Phase "installing"
+        Remove-ManagedCommandShimsForNpmInstall -Transaction $transaction
         & $NpmCmd install -g $Prepared.tarball --prefer-offline --no-audit --no-fund | Out-Host
         if ($LASTEXITCODE -ne 0) { throw "npm update failed with exit code $LASTEXITCODE" }
         if ((Get-InstalledVersion) -ne $Prepared.targetVersion) { throw "Installed version did not match prepared update." }

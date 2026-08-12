@@ -4,6 +4,9 @@ automation/work/
 automation/legacy-backup/
 automation/state/
 *.test.js
+!model-account-routing.test.js
+!provider-detail-patch.test.js
+!update-shim-cutover.test.js
 
 # Ignore temporary patch backup files
 *.patched.js
