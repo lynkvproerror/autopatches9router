@@ -13,6 +13,7 @@ This folder owns all custom startup, health, update, and patch orchestration.
 - Dashboard patching is constrained to dashboard artifacts; the bulk-import API patch remains a separate explicit scope.
 - Dashboard patching can run while the API is active and only restarts the dashboard stage.
 - `apply-patches.ps1` delegates to the controller, while `apply-patches.js` refuses implicit global roots; every write target must be explicit.
+- API Patch 28 performs account selection only: Codex selects the requested model, Sol fails closed without a Plus-or-higher account, and Terra prefers Free/Go/K12/Edu before its documented Plus+ fallback.
 - Dashboard role guards prevent the staging process from starting AutoPing, tunnel, Tailscale, MITM, or outbound-proxy workers.
 - The quota page defers its first render until hydration and is excluded from prerendering to prevent React hydration failures.
 - The experimental Quota SSR bypass is repaired by default and only enabled with `--experimental`.

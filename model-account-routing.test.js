@@ -66,11 +66,11 @@ test('detects tier from reasoning effort suffix', () => {
     assert.equal(getModelTier('gpt-5.6:medium'), 'terra');
 });
 
-test('defaults to terra for unrecognized models', () => {
-    assert.equal(getModelTier('gpt-5.5'), 'terra');
-    assert.equal(getModelTier('gpt-5.6'), 'terra');
-    assert.equal(getModelTier(''), 'terra');
-    assert.equal(getModelTier(null), 'terra');
+test('leaves unrecognized models unrestricted', () => {
+    assert.equal(getModelTier('gpt-5.5'), 'unrestricted');
+    assert.equal(getModelTier('gpt-5.6'), 'unrestricted');
+    assert.equal(getModelTier(''), 'unrestricted');
+    assert.equal(getModelTier(null), 'unrestricted');
 });
 
 // ── Policy classification ────────────────────────────────────────
@@ -79,8 +79,27 @@ test('classifies Codex Sol and Terra models correctly', () => {
     assert.equal(getModelAccountPolicy('codex', 'codex-sol'), 'sol');
     assert.equal(getModelAccountPolicy('CODEX', 'codex/gpt-5.6-terra'), 'terra');
     assert.equal(getModelAccountPolicy('codex', 'codex-mini'), 'terra');
-    assert.equal(getModelAccountPolicy('codex', 'gpt-5.5'), 'terra');
+    assert.equal(getModelAccountPolicy('codex', 'gpt-5.5'), 'unrestricted');
     assert.equal(getModelAccountPolicy('openai', 'gpt-5.6-sol'), 'unrestricted');
+});
+
+test('unrecognized Codex models preserve the exact candidate list', () => {
+    assert.deepEqual(
+        filterConnectionsForModel(FIXTURE_CONNECTIONS, 'codex', 'gpt-5.5'),
+        FIXTURE_CONNECTIONS,
+    );
+    assert.deepEqual(
+        filterConnectionsForModel(FIXTURE_CONNECTIONS, 'codex', 'gpt-5.6'),
+        FIXTURE_CONNECTIONS,
+    );
+    assert.deepEqual(
+        filterConnectionsForModel(FIXTURE_CONNECTIONS, 'codex', ''),
+        FIXTURE_CONNECTIONS,
+    );
+    assert.deepEqual(
+        filterConnectionsForModel(FIXTURE_CONNECTIONS, 'codex', null),
+        FIXTURE_CONNECTIONS,
+    );
 });
 
 // ── Sol filtering: Plus/Pro/Business/Enterprise (NOT K12/Free/Go) ─
@@ -111,11 +130,10 @@ test('terra prefers Free/Go/K12 accounts, saves Plus for Sol', () => {
 });
 
 // ── Fallback behavior ────────────────────────────────────────────
-test('sol falls back to all accounts when no Sol-capable exist', () => {
+test('sol fails closed when no Plus-or-higher account exists', () => {
     const lowTierOnly = [connection('free', 'Free'), connection('k12', 'K-12'), connection('go', 'Go')];
     const result = filterConnectionsForModel(lowTierOnly, 'codex', 'gpt-5.6-sol');
-    // Should return ALL accounts as fallback (not empty!)
-    assert.equal(result.length, 3, 'Should fallback to all accounts');
+    assert.deepEqual(result, [], 'Sol must not fall back to lower-tier accounts');
 });
 
 test('terra falls back to all accounts when no low-tier exist', () => {
@@ -125,10 +143,10 @@ test('terra falls back to all accounts when no low-tier exist', () => {
     assert.equal(result.length, 2, 'Should fallback to Plus+ accounts');
 });
 
-test('rejects unknown plans from preferred tier but allows via fallback', () => {
+test('unknown plans fail closed for Sol and remain Terra fallback candidates', () => {
     const unknownOnly = [connection('unknown')];
-    // Sol: unknown not in SOL_CAPABLE → empty → fallback to all
-    assert.equal(filterConnectionsForModel(unknownOnly, 'codex', 'gpt-5.6-sol').length, 1);
+    // Sol: unknown is not Plus-or-higher, so it must not consume it.
+    assert.equal(filterConnectionsForModel(unknownOnly, 'codex', 'gpt-5.6-sol').length, 0);
     // Terra: unknown not in TERRA_PREFERRED → empty → fallback to all
     assert.equal(filterConnectionsForModel(unknownOnly, 'codex', 'gpt-5.6-terra').length, 1);
 });
@@ -170,14 +188,16 @@ const SELECTOR_FIXTURE = [
     '}};',
 ].join('');
 
-test('patches the credential selector once with a v2 tier filter', () => {
+test('patches the credential selector once with a v3 tier filter', () => {
     const first = patchCredentialSelectorContent(SELECTOR_FIXTURE);
     assert.equal(first.matched, true);
     assert.equal(first.changed, true);
-    assert.equal(first.content.match(/__9router_model_account_tier_v2__/g)?.length, 1);
+    assert.equal(first.content.match(/__9router_model_account_tier_v3__/g)?.length, 1);
     assert.match(first.content, /sol/);
     assert.match(first.content, /terra/);
     assert.match(first.content, /mini/);
+    assert.match(first.content, /:"unrestricted"/);
+    assert.match(first.content, /if\("terra"!==t\)return a/);
 
     const second = patchCredentialSelectorContent(first.content);
     assert.equal(second.matched, true);
@@ -185,7 +205,7 @@ test('patches the credential selector once with a v2 tier filter', () => {
     assert.equal(second.content, first.content);
 });
 
-test('upgrades v1 patch to v2 when v1 marker found', () => {
+test('upgrades v1 patch to v3 when v1 marker found', () => {
     // Simulate a v1-patched content
     const v1Content = SELECTOR_FIXTURE.replace(
         'let j=await (0,d.getProviderConnections)({provider:g,isActive:!0});',
@@ -194,8 +214,44 @@ test('upgrades v1 patch to v2 when v1 marker found', () => {
     const result = patchCredentialSelectorContent(v1Content);
     assert.equal(result.matched, true);
     assert.equal(result.changed, true);
-    assert.match(result.content, /__9router_model_account_tier_v2__/);
+    assert.match(result.content, /__9router_model_account_tier_v3__/);
     assert.doesNotMatch(result.content, /__9router_model_account_tier_v1__/);
+});
+
+test('upgrades a realistic old v2 filter to v3 with fail-closed Sol semantics', () => {
+    const anchor = 'let j=await (0,d.getProviderConnections)({provider:g,isActive:!0});';
+    const v2Prefix = 'j=/*__9router_model_account_tier_v2__*/function(a,b,c){let d=String(c||"").toLowerCase();if("sol"===d){let g=a.filter(a=>true);return g.length>0?g:a}return a}(j,g,c);';
+    const legacyExactFilter = 'j=/*__9router_model_account_tier_v1__*/function(a,b,c){if("codex"!==String(b||"").toLowerCase())return a;let d=String(c||"").toLowerCase(),e=a=>String(a?.providerSpecificData?.chatgptPlanType??"").trim().toLowerCase();if(d.includes("gpt-5.6-terra"))return a.filter(a=>"free"===e(a));if(d.includes("gpt-5.6-sol")){let b=new Set(["k12","plus"]);return a.filter(a=>b.has(e(a)))}return a}(j,g,c);';
+    const content = SELECTOR_FIXTURE.replace(anchor, anchor + v2Prefix + legacyExactFilter);
+
+    const result = patchCredentialSelectorContent(content);
+    assert.equal(result.matched, true);
+    assert.equal(result.changed, true);
+    assert.equal(result.content.match(/__9router_model_account_tier_v3__/g)?.length, 1);
+    assert.equal(result.content.match(/__9router_model_account_tier_v2__/g)?.length ?? 0, 0);
+    assert.doesNotMatch(result.content, /__9router_model_account_tier_v1__/);
+    assert.doesNotMatch(result.content, /gpt-5\.6-sol/);
+    assert.doesNotMatch(result.content, /gpt-5\.6-terra/);
+    assert.match(result.content, /if\("sol"===t\)\{[^}]*return g\}if\("terra"!==t\)return a/);
+
+    const second = patchCredentialSelectorContent(result.content);
+    assert.equal(second.matched, true);
+    assert.equal(second.changed, false);
+    assert.equal(second.content, result.content);
+});
+
+test('removes an unmarked legacy exact filter left beside v3', () => {
+    const anchor = 'let j=await (0,d.getProviderConnections)({provider:g,isActive:!0});';
+    const v2Prefix = 'j=/*__9router_model_account_tier_v3__*/function(a,b,c){return a}(j,g,c);';
+    const legacyExactFilter = 'j=function(a,b,c){if("codex"!==String(b||"").toLowerCase())return a;let d=String(c||"").toLowerCase();if(d.includes("gpt-5.6-terra"))return a;if(d.includes("gpt-5.6-sol"))return [];return a}(j,g,c);';
+    const content = SELECTOR_FIXTURE.replace(anchor, anchor + v2Prefix + legacyExactFilter);
+
+    const result = patchCredentialSelectorContent(content);
+    assert.equal(result.matched, true);
+    assert.equal(result.changed, true);
+    assert.equal(result.content.match(/__9router_model_account_tier_v3__/g)?.length, 1);
+    assert.doesNotMatch(result.content, /gpt-5\.6-sol/);
+    assert.doesNotMatch(result.content, /gpt-5\.6-terra/);
 });
 
 test('does not claim unsupported chunks as routing targets', () => {

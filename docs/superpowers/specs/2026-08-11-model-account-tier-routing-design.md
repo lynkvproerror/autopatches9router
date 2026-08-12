@@ -2,14 +2,18 @@
 
 ## Objective
 
-Enforce deterministic Codex account selection inside 9router:
+Keep ordinary Codex work on `gpt-5.6-terra` while enforcing deterministic
+model-to-account selection inside 9router:
 
-- Implementation and code-editing work stays on `gpt-5.6-terra`.
-- Debugging, verification, review, and read-heavy analysis use dedicated `gpt-5.6-sol` roles when delegation is useful.
-- `gpt-5.6-sol` uses only active K12 or Plus-and-higher accounts.
-- `gpt-5.6-terra` uses only active Free accounts.
-- Other models preserve the upstream 9router selection behavior.
-- Requests never cross tiers when the required tier has no eligible account.
+- Codex chooses the requested model; 9router only selects an account and does
+  not classify tasks.
+- New primary tasks default to Terra. Existing tasks retain their selected
+  model and must be switched or recreated to move from Sol to Terra.
+- `gpt-5.6-sol` uses active Plus-or-higher accounts only and fails closed when
+  none are available.
+- `gpt-5.6-terra` prefers active Free, Go, K12, and Edu accounts, then may use
+  Plus-or-higher accounts when no preferred account is available.
+- Other models retain the upstream account-selection behavior.
 
 ## Current State
 
@@ -48,30 +52,35 @@ Rejected for this scope because it duplicates authentication/provider configurat
 Create `model-account-routing.js` as a focused, testable module with four responsibilities:
 
 1. Normalize a connection's plan without reading secrets.
-2. Classify a model into `premium`, `free`, or `unrestricted` policy.
+2. Classify a requested model into `sol`, `terra`, or unrestricted policy.
 3. Filter active connections according to the policy.
-4. Patch the minified credential selector using a version marker and fail-closed anchor validation.
+4. Patch the minified credential selector using the v3 marker, upgrading v1/v2 assignments, and fail-closed anchor validation.
 
 `apply-patches.js` will add API Patch 28, scan `server/chunks/*.js`, require exactly one credential-selector target, and write only that target. The controller will run the routing regression test whenever API or full-scope patches are applied.
 
-Codex global configuration will register three custom roles in `~/.codex/config.toml` and point them to config layers under `~/.codex/agents/`: `sol_analyst`, `sol_verifier`, and `terra_coder`. This registry-plus-layer format is compatible with the installed Codex CLI 0.144.1. Global instructions will keep direct implementation on Terra, delegate evidence-heavy debugging and verification to the Sol roles when useful, and avoid parallel write conflicts. The main Codex model remains Terra; the role config layers inherit the 9router provider.
+Codex global configuration registers `sol_analyst`, `sol_verifier`, and
+`terra_coder`. The main Codex model is Terra. Sol is exceptional: use the
+analyst for hard or evidence-heavy work and the verifier only for high-risk
+changes or an explicit independent audit. All implementation belongs to
+`terra_coder`; routine verification remains on Terra.
 
 ## Routing Policy
 
 | Requested model | Eligible plans |
 | --- | --- |
-| Model ID containing `gpt-5.6-sol` | `k12`, `plus`, `pro`, `team`, `business`, `enterprise`, `edu`, `premium`, `ultra` |
-| Model ID containing `gpt-5.6-terra` | `free` |
-| Any other model | All upstream-eligible plans |
+| Sol-tier model ID | `plus`, `pro`, `team`, `business`, `enterprise`, `premium`, `ultra`; no fallback |
+| Terra-tier model ID | Prefer `free`, `go`, `k12`, `edu`; otherwise all upstream-eligible accounts, including Plus+ |
+| Any other model | Unrestricted; all upstream-eligible plans |
 
-Plan matching is case-insensitive and ignores spaces, underscores, and hyphens. Unknown or missing plans are excluded from Sol and Terra requests but remain eligible for unrelated models.
+Plan matching is case-insensitive and ignores spaces, underscores, and hyphens.
+Only explicit Sol/Terra/Luna/Mini IDs or recognized reasoning suffixes are
+tier-filtered. Unknown model IDs are unrestricted. Unknown or missing plans
+are excluded from Sol, remain Terra fallback candidates, and remain eligible
+for unrestricted models.
 
 ## Data Flow
 
 ```text
-Codex task classification
-  -> implementation/editing: Terra primary or terra_coder
-  -> debugging/verification/analysis: sol_analyst or sol_verifier
 Codex request
   -> resolve provider/model
   -> load active Codex connections
@@ -83,18 +92,18 @@ Codex request
 
 ## Failure Behavior
 
-- If no account remains after tier filtering, reuse the upstream `No active credentials for provider: codex` response path.
-- Do not fall back from Sol to Free or from Terra to Plus/K12.
+- If no Plus-or-higher account remains for Sol, reuse the upstream `No active credentials for provider: codex` response path.
+- Sol never falls back to lower-tier, unknown, or otherwise ineligible plans. Terra may fall back to Plus+ only after no Free/Go/K12/Edu account is available.
 - If the target selector anchor is absent or appears more than once, Patch 28 returns failure and the transactional controller keeps the previous verified installation.
 - Inactive accounts remain excluded by the existing database query before tier filtering.
 
 ## Testing
 
 - Unit tests cover plan normalization and every model-policy branch.
-- Mutation-sensitive cases prove Terra rejects Plus, Sol rejects Free, inactive status is delegated to the upstream active query, unknown plans fail closed for restricted models, and unrelated models stay unchanged.
-- Patch tests cover successful injection, marker idempotency, and rejection of unsupported chunk layouts.
+- Mutation-sensitive cases prove Sol rejects Free/K12/unknown plans, Terra prefers lower-tier plans before its explicit Plus+ fallback, inactive status is delegated to the upstream active query, and unrelated models stay unchanged.
+- Patch tests cover v3 injection, idempotency, unsupported chunk layouts, and migration cleanup/upgrades of v1/v2 and the legacy exact Sol/Terra assignment.
 - Controller validation runs the test against the explicit app root before API startup.
-- Codex CLI smoke tests must load the global configuration without the existing malformed-agent warning, spawn the named roles, and produce matching Sol/Plus+ and Terra/Free runtime records in 9router.
+- Codex configuration smoke tests must confirm new primary tasks use Terra. Existing task sessions require an explicit model switch or recreation before their model changes.
 
 ## Rollout
 

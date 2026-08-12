@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Route implementation work to Terra/Free, route delegated debugging and verification work to Sol/K12-or-Plus+, and preserve upstream routing for unrelated models.
+**Goal:** Make Terra the default for new ordinary work, reserve Sol for exceptional analysis or high-risk independent verification, and route each requested model to cost-aware eligible accounts.
 
 **Architecture:** Add a pure routing-policy and chunk-patching module, invoke it from a new API-scoped patch, and register its regression test in the transactional controller. Filtering occurs before upstream model-lock and round-robin logic, so existing availability behavior is preserved within each allowed tier.
 
@@ -10,8 +10,10 @@
 
 ## Global Constraints
 
-- Sol must never fall back to Free.
-- Terra must never use K12, Plus, Pro, Team, Business, Enterprise, Edu, Premium, or Ultra accounts.
+- Codex chooses the requested model; 9router only chooses an account and does not classify tasks.
+- New primary tasks default to Terra. Existing task sessions retain their selected model until explicitly switched or recreated.
+- Sol must fail closed when no Plus-or-higher account exists; it must never fall back to Free, Go, K12, Edu, or unknown plans.
+- Terra prefers Free, Go, K12, and Edu, then may fall back to Plus-or-higher accounts when no preferred account exists.
 - Only active accounts are considered; existing 9router active-state querying remains authoritative.
 - Other model IDs retain upstream account-selection behavior.
 - Unsupported upstream bundle layouts fail the patch instead of silently skipping enforcement.
@@ -28,7 +30,7 @@
 
 **Interfaces:**
 - Produces: `normalizeAccountPlan(connection): string`
-- Produces: `getModelAccountPolicy(provider, model): "premium" | "free" | "unrestricted"`
+- Produces: `getModelAccountPolicy(provider, model): "sol" | "terra" | "unrestricted"`
 - Produces: `filterConnectionsForModel(connections, provider, model): object[]`
 - Produces: `patchCredentialSelectorContent(content): { changed: boolean, content: string }`
 
@@ -44,23 +46,9 @@ Add this exception immediately after `*.test.js`:
 
 Create table-driven tests with literal expected connection IDs:
 
-```js
-test('terra keeps only free Codex accounts', () => {
-  assert.deepEqual(
-    filterConnectionsForModel(FIXTURE_CONNECTIONS, 'codex', 'gpt-5.6-terra').map(item => item.id),
-    ['free'],
-  );
-});
-
-test('sol keeps K12 and Plus-or-higher Codex accounts', () => {
-  assert.deepEqual(
-    filterConnectionsForModel(FIXTURE_CONNECTIONS, 'codex', 'gpt-5.6-sol').map(item => item.id),
-    ['k12', 'plus', 'pro', 'team', 'business', 'enterprise', 'edu', 'premium', 'ultra'],
-  );
-});
-```
-
-Also cover case normalization, separators, unknown plans, non-Codex providers, unrelated models, patch injection, idempotency, and unsupported content.
+Test Sol fail-closed behavior, Terra's lower-tier preference and explicit
+Plus+ fallback, plan normalization, unknown plans, non-Codex providers,
+unrelated models, patch injection, idempotency, and unsupported content.
 
 - [x] **Step 3: Run tests and verify RED**
 
@@ -70,7 +58,7 @@ Expected: FAIL because `model-account-routing.js` does not exist.
 
 - [x] **Step 4: Implement the minimal pure module**
 
-Use an explicit premium-plan set and a marker named `/*__9router_model_account_tier_v1__*/`. Locate the selector function parameters and `getProviderConnections({provider, isActive: true})` anchor, then inject a call equivalent to:
+Use explicit Sol-capable and Terra-preferred plan sets and a version marker. Locate the selector function parameters and `getProviderConnections({provider, isActive: true})` anchor, then inject a call equivalent to:
 
 ```js
 connections = filterConnectionsForModel(connections, normalizedProvider, model);
@@ -153,7 +141,7 @@ Repeat for `automation/install-automation.ps1`; expected exit 0 with no parser e
 - Test: a temporary copy under `automation/work/` of the installed 9router app.
 
 **Interfaces:**
-- Consumes: complete patch set and installed v0.5.45 app layout.
+- Consumes: complete patch set and the installed 9router app layout.
 - Produces: evidence that Patch 28 applies once, is idempotent, and keeps all regression tests green.
 
 - [x] **Step 1: Copy the installed app into an isolated verification root**
@@ -195,7 +183,9 @@ Run:
 pwsh -NoProfile -File automation/9router-control.ps1 -Action ApplyPatches -Scope api
 ```
 
-The controller must stop the managed API, create its rollback snapshot, apply patches and tests, update the fingerprint, and restore health.
+The controller applies API Patch 28 only while the managed API is stopped,
+creates its rollback snapshot, runs tests, updates the fingerprint, and starts
+the API through its normal health-checked path.
 
 - [x] **Step 2: Verify service health**
 
@@ -213,7 +203,10 @@ Run the unit test against representative Free, K12, Plus, and unknown-plan conne
 
 - [x] **Step 4: Verify observed routing after requests occur**
 
-Query `usageHistory` joined to `providerConnections` and confirm new Terra entries use `free`, while new Sol entries use only the premium whitelist. Report that live traffic evidence is pending if no post-deployment requests exist yet.
+Query `usageHistory` joined to `providerConnections` and confirm new Terra
+entries prefer Free/Go/K12/Edu when available while new Sol entries use only
+the Plus+ whitelist. Report that live traffic evidence is pending if no
+post-deployment requests exist yet.
 
 ### Task 6: Codex Task-to-Model Agent Roles
 
@@ -226,7 +219,7 @@ Query `usageHistory` joined to `providerConnections` and confirm new Terra entri
 
 **Interfaces:**
 - Produces: valid custom roles selectable by Codex based on their descriptions.
-- Produces: persistent orchestration guidance mapping read-heavy/debug work to Sol and write-heavy implementation to Terra.
+- Produces: persistent cost-aware guidance that reserves Sol for exceptional work and assigns implementation to Terra.
 
 - [x] **Step 1: Preserve a timestamped configuration backup**
 
@@ -258,17 +251,16 @@ Each referenced config layer must contain `developer_instructions` and its pinne
 
 - [x] **Step 4: Add durable orchestration instructions**
 
-Append a `Model orchestration` section to `bridge.md` that keeps implementation on Terra, uses Sol roles for debugging/verification/read-heavy analysis when delegation materially helps, and requires the primary agent to synthesize results.
+Maintain a cost-aware `Model orchestration` section in `bridge.md`: Terra handles ordinary work and implementation; Sol analysis is limited to hard, security, reverse-engineering, or evidence-heavy work; Sol verification is limited to high-risk changes or an explicit independent audit. Routine verification remains on Terra.
 
 - [x] **Step 5: Verify configuration loading**
 
-Run a minimal `codex exec` request and inspect stderr. Then explicitly spawn each custom role and inspect 9router usage history. Expected: no `Ignoring malformed agent role definition` warning, Terra requests use Free, and Sol requests use K12/Plus-or-higher.
+Run a minimal `codex exec` request and inspect stderr. Confirm new primary tasks use Terra; existing sessions retain their model until explicitly switched or recreated. When invoked, Sol must use only Plus-or-higher accounts; Terra should prefer lower-tier accounts before its explicit Plus+ fallback.
 
-## Deployment Results
+## Deployment Status
 
-- Patch 28 was applied transactionally to installed 9router v0.5.45 and remains idempotent with one marker in `server/chunks/4664.js`.
-- Routing regression suite passes 8/8 tests; Node syntax, PowerShell parsing, target discovery, API scope hashing, and `git diff --check` pass.
-- Controller reports current API patches, healthy API/model endpoints, and a healthy isolated dashboard; HTTP probes return 200.
-- Fresh Codex CLI smoke tests load all custom roles without a malformed-role warning.
-- Delegated Sol role traffic produced successful `gpt-5.6-sol` records on Plus accounts; Terra primary and delegated traffic produced successful `gpt-5.6-terra` records on Free accounts.
+- Source is ready and locally validated: Patch 28 will upgrade prior v1/v2 filters to one idempotent v3 marker, with Sol fail-closed behavior, Terra's documented Plus+ fallback, and cleanup of the legacy exact Sol/Terra assignment.
+- Runtime deployment is pending. The installed 9router chunk currently remains on v2 with a leftover legacy exact filter until the controlled `RestartApi` path reapplies Patch 28.
+- After the controlled restart, verify one v3 marker, no v1/v2 or legacy exact filter, API/model health, and the preserved dashboard listener.
+- New primary Terra traffic should prefer lower-tier accounts; Sol traffic should use only Plus-or-higher accounts. Existing tasks require a model switch or recreation before they move from Sol to Terra.
 

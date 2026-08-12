@@ -4,7 +4,7 @@ Bộ công cụ tự động vá lỗi, tối ưu hóa hiệu năng, thêm tính
 
 ---
 
-## ✨ Tính năng nổi bật (26 Patches Tích hợp)
+## ✨ Tính năng nổi bật (28 Patches Tích hợp)
 
 ### 🎓 1. K12 Token-Aware Rotation Engine (Patch 24 & 25)
 - **Quản lý nghỉ ngơi thông minh:** Tự động điều chỉnh trạng thái tài khoản K12 dựa trên hạn mức token thực tế (Session % & Weekly %).
@@ -25,6 +25,12 @@ Bộ công cụ tự động vá lỗi, tối ưu hóa hiệu năng, thêm tính
 - **Bulk Import (Patch 1):** Tự động chuẩn hóa dữ liệu khi import tài khoản hàng loạt (Codex, CPA JSON, sub2api).
 - **Quota Performance & Hydration (Patch 20 & 14):** Tối ưu tải danh sách lớn (up to 500 accounts/page), chống giật lag và giảm thiểu lỗi Hydration.
 - **Smart Priority (Patch 21):** Tự động sắp xếp thứ tự ưu tiên các tài khoản theo hạn mức khả dụng.
+
+### 🧭 4. Cost-aware Codex Account Routing (Patch 28)
+- **Codex chọn model, 9router chọn tài khoản:** 9router không phân loại công việc; nó chỉ lọc tài khoản phù hợp với model mà Codex đã yêu cầu.
+- **Terra mặc định:** tác vụ mới thông thường dùng Terra và ưu tiên Free, Go, K12, Edu; nếu các gói này không khả dụng thì Terra có thể dùng Plus+.
+- **Sol ngoại lệ:** Sol chỉ dùng Plus+ và fail closed khi không có tài khoản phù hợp, nên không tiêu quota Free/Go/K12/Edu.
+- **Phiên đang chạy:** task cũ giữ model đã chọn; cần đổi model hoặc tạo lại task để chuyển từ Sol sang Terra.
 
 ---
 

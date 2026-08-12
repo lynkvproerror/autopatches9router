@@ -1877,7 +1877,7 @@ function patchModelAccountTierRouting() {
     }
 
     fs.writeFileSync(target.file, target.content, 'utf8');
-    console.log(`  ✅ Enforced Sol=Plus+ and Terra=Free/Go/K12 in ${target.name}`);
+    console.log(`  ✅ Enforced v3: Sol=Plus+ fail-closed and Terra=Free/Go/K12/Edu preferred in ${target.name}`);
     return true;
 }
 
