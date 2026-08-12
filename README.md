@@ -30,7 +30,20 @@ Bộ công cụ tự động vá lỗi, tối ưu hóa hiệu năng, thêm tính
 - **Codex chọn model, 9router chọn tài khoản:** 9router không phân loại công việc; nó chỉ lọc tài khoản phù hợp với model mà Codex đã yêu cầu.
 - **Terra mặc định:** tác vụ mới thông thường dùng Terra và ưu tiên Free, Go, K12, Edu; nếu các gói này không khả dụng thì Terra có thể dùng Plus+.
 - **Sol ngoại lệ:** Sol chỉ dùng Plus+ và fail closed khi không có tài khoản phù hợp, nên không tiêu quota Free/Go/K12/Edu.
-- **Phiên đang chạy:** task cũ giữ model đã chọn; cần đổi model hoặc tạo lại task để chuyển từ Sol sang Terra.
+- **Policy không nằm trong 9router:** Patch 28 chỉ định tuyến tài khoản (Sol -> Plus+, Terra -> ưu tiên Free/Go/K12/Edu); Codex instruction và role mới quyết định model/loại công việc.
+
+### 🧠 5. Codex Delegation and Rollout Audit
+- **Terra là primary:** Terra xử lý tác vụ thông thường, phân tích thường quy và verification thường quy.
+- **Sol analyst có điều kiện:** chỉ dùng `sol_analyst` cho phân tích khó/tái hiện không ổn định, security, reverse engineering hoặc evidence-heavy.
+- **Thay đổi production:** mọi production code change phải do `terra_coder` hoàn thành trước, sau đó mới giao `sol_verifier`; không chạy writer và verifier song song trên cùng thay đổi.
+- **Đổi model khi spawn:** dùng `fork_turns="none"` hoặc một số lượt dương nhỏ. Không dùng `fork_turns="all"` hay bỏ trống khi chuyển model, vì full-history fork có thể kế thừa model task cha.
+- **Task cũ:** snapshot policy/model cũ không tự thay đổi. Gửi direct policy message, đổi model hoặc tạo lại task trước khi kỳ vọng policy mới có hiệu lực.
+- **Audit chỉ quan sát:** structured rollout audit là nonblocking, không inject policy và không có verified hook. Chạy thủ công:
+  ```powershell
+  python -B automation/audit-codex-rollout.py <rollout.jsonl>
+  python -B -m unittest automation/test_audit_codex_rollout.py
+  ```
+- **Phiên bản Codex:** target là Desktop Codex 0.147; `codex` trên PATH có thể vẫn là 0.144, nên phải kiểm tra executable thực tế trước khi suy luận hỗ trợ cấu hình.
 
 ---
 

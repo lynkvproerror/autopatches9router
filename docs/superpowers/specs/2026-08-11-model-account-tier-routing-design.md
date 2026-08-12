@@ -14,6 +14,8 @@ model-to-account selection inside 9router:
 - `gpt-5.6-terra` prefers active Free, Go, K12, and Edu accounts, then may use
   Plus-or-higher accounts when no preferred account is available.
 - Other models retain the upstream account-selection behavior.
+- 9router does not inject task policy. Codex roles and instructions choose the
+  requested model; Patch 28 only enforces account eligibility for that request.
 
 ## Current State
 
@@ -59,10 +61,27 @@ Create `model-account-routing.js` as a focused, testable module with four respon
 `apply-patches.js` will add API Patch 28, scan `server/chunks/*.js`, require exactly one credential-selector target, and write only that target. The controller will run the routing regression test whenever API or full-scope patches are applied.
 
 Codex global configuration registers `sol_analyst`, `sol_verifier`, and
-`terra_coder`. The main Codex model is Terra. Sol is exceptional: use the
-analyst for hard or evidence-heavy work and the verifier only for high-risk
-changes or an explicit independent audit. All implementation belongs to
-`terra_coder`; routine verification remains on Terra.
+`terra_coder`. Terra is the primary model for ordinary work, routine analysis,
+and routine verification. Use `sol_analyst` only for hard or
+reproduction-resistant analysis, security, reverse engineering, or
+evidence-heavy investigation. Every production code change belongs to
+`terra_coder`; it must complete before `sol_verifier` starts, and no concurrent
+writer/verifier pair may operate on the same change.
+
+When a child must switch models, spawn it with `fork_turns="none"` or a small
+positive history count. Do not use `fork_turns="all"` or omit the value because
+a full-history fork can inherit the parent model. Existing task snapshots also
+retain their prior policy/model until given a direct policy message, switched,
+or recreated.
+
+Rollout auditing is a structured, audit-only, nonblocking observation step:
+`python -B automation/audit-codex-rollout.py <rollout.jsonl>`. It does not
+inject policy and has no verified hook. Its unit test is
+`python -B -m unittest automation/test_audit_codex_rollout.py`.
+
+The configuration target is Desktop Codex 0.147. The `codex` executable on
+`PATH` may still report 0.144, so compatibility checks must identify the actual
+Desktop executable rather than infer behavior from the PATH binary.
 
 ## Routing Policy
 

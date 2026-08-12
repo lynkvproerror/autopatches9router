@@ -12,6 +12,15 @@
 
 - Codex chooses the requested model; 9router only chooses an account and does not classify tasks.
 - New primary tasks default to Terra. Existing task sessions retain their selected model until explicitly switched or recreated.
+- Terra also owns routine analysis and routine verification. `sol_analyst` is
+  reserved for hard, reproduction-resistant, security, reverse-engineering, or
+  evidence-heavy analysis.
+- Every production code change is implemented by `terra_coder`, then verified
+  by `sol_verifier` only after the coder completes; do not overlap the writer
+  and verifier on the same change.
+- For a model switch, use `fork_turns="none"` or a small positive count. Never
+  use `fork_turns="all"` or omit it, because full-history forks can inherit the
+  parent model.
 - Sol must fail closed when no Plus-or-higher account exists; it must never fall back to Free, Go, K12, Edu, or unknown plans.
 - Terra prefers Free, Go, K12, and Edu, then may fall back to Plus-or-higher accounts when no preferred account exists.
 - Only active accounts are considered; existing 9router active-state querying remains authoritative.
@@ -219,7 +228,10 @@ post-deployment requests exist yet.
 
 **Interfaces:**
 - Produces: valid custom roles selectable by Codex based on their descriptions.
-- Produces: persistent cost-aware guidance that reserves Sol for exceptional work and assigns implementation to Terra.
+- Produces: persistent cost-aware guidance that makes Terra primary for routine
+  work/analysis/verification, reserves `sol_analyst` for exceptional analysis,
+  and sequences every production code change from `terra_coder` to completed
+  `sol_verifier` review.
 
 - [x] **Step 1: Preserve a timestamped configuration backup**
 
@@ -243,7 +255,9 @@ description = "Use for implementation, refactoring, and targeted code fixes afte
 config_file = "agents/terra_coder.toml"
 ```
 
-Do not use scalar defaults under `[agents]` on Codex CLI 0.144.1; that release parses every child as an `AgentRoleToml` declaration.
+The configuration intentionally omits scalar default-subagent settings under
+`[agents]`; compatibility does not depend on support for those defaults. Test
+the Desktop target rather than retaining the obsolete 0.144 compatibility claim.
 
 - [x] **Step 3: Create valid custom agent files**
 
@@ -251,11 +265,24 @@ Each referenced config layer must contain `developer_instructions` and its pinne
 
 - [x] **Step 4: Add durable orchestration instructions**
 
-Maintain a cost-aware `Model orchestration` section in `bridge.md`: Terra handles ordinary work and implementation; Sol analysis is limited to hard, security, reverse-engineering, or evidence-heavy work; Sol verification is limited to high-risk changes or an explicit independent audit. Routine verification remains on Terra.
+Maintain a cost-aware `Model orchestration` section in `bridge.md`: Terra handles
+ordinary work, routine analysis, and routine verification; `sol_analyst` is
+limited to hard, reproduction-resistant, security, reverse-engineering, or
+evidence-heavy analysis. Every production implementation must complete in
+`terra_coder` before `sol_verifier` starts; never run the writer and verifier
+concurrently. A model-switching spawn uses `fork_turns="none"` or a small
+positive count, never `all` or an omitted value.
 
 - [x] **Step 5: Verify configuration loading**
 
-Run a minimal `codex exec` request and inspect stderr. Confirm new primary tasks use Terra; existing sessions retain their model until explicitly switched or recreated. When invoked, Sol must use only Plus-or-higher accounts; Terra should prefer lower-tier accounts before its explicit Plus+ fallback.
+Run a minimal Desktop Codex 0.147 request and inspect stderr. Confirm new
+primary tasks use Terra; old task snapshots need a direct policy message,
+explicit switch, or recreation. Run the nonblocking audit separately with
+`python -B automation/audit-codex-rollout.py <rollout.jsonl>` and its unittest
+with `python -B -m unittest automation/test_audit_codex_rollout.py`; the audit
+does not inject policy and has no verified hook. When invoked, Sol must use only
+Plus-or-higher accounts; Terra should prefer lower-tier accounts before its
+explicit Plus+ fallback.
 
 ## Deployment Status
 
