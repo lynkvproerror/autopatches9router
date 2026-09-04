@@ -770,15 +770,11 @@ function patchQuotaPageBulk() {
         `const __9rTurnOffEmpty=async()=>{`,
         `  let targets=${aliases.list}.filter(e=>(e.isActive??!0)&&${aliases.emptyPredicate}(e));`,
         `  ${aliases.toggle}(targets.map(e=>e.id),!1);`,
-        `  let k12Hit=targets.some(e=>{let p=String(${aliases.quotaMap}[e.id]?.plan||"").toLowerCase();return p.includes("k12")});`,
-        '  if(k12Hit&&typeof __9rSyncK12Rotation==="function")try{await __9rSyncK12Rotation(false,"K12 b\u1ecb t\u1eaft b\u1edfi Turn off Empty")}catch(_){}',
-        '};',
+        `};`,
         `const __9rTurnOnAvailable=async()=>{`,
         `  let targets=${aliases.list}.filter(e=>!(e.isActive??!0)&&!${aliases.emptyPredicate}(e));`,
         `  ${aliases.toggle}(targets.map(e=>e.id),!0);`,
-        `  let k12Hit=targets.some(e=>{let p=String(${aliases.quotaMap}[e.id]?.plan||"").toLowerCase();return p.includes("k12")});`,
-        '  if(k12Hit&&typeof __9rSyncK12Rotation==="function")try{await __9rSyncK12Rotation(true,"K12 \u0111\u01b0\u1ee3c b\u1eadt b\u1edfi Turn on Available")}catch(_){}',
-        '};',
+        `};`,
         'const bulkDelete401=async()=>{',
         `  const targets=planFilteredEZ.filter(e=>e.errorCode===401||e.errorCode==="401"||e.errorCode===402||e.errorCode==="402"||e.testStatus==="invalid"||(e.lastError&&(String(e.lastError).includes("401")||String(e.lastError).includes("402")))||(${aliases.quotaMap}[e.id]?.message&&(String(${aliases.quotaMap}[e.id].message).includes("401")||String(${aliases.quotaMap}[e.id].message).includes("402"))));`,
         '  if(!targets.length){alert("No 401/402 connections found on this page.");return;}',
@@ -792,8 +788,6 @@ function patchQuotaPageBulk() {
         `        ${aliases.errorSetter}(t=>{let r={...t};delete r[e.id];return r;});`,
         '      }));',
         `      await b(${aliases.fetchAccounts},${aliases.page});`,
-        `      let __k12DelHit=targets.some(e=>{let p=String(${aliases.quotaMap}[e.id]?.plan||"").toLowerCase();return p.includes("k12")});`,
-        '      if(__k12DelHit&&typeof __9rSyncK12Rotation==="function")try{alert("\u26a0\ufe0f C\u00e1c t\u00e0i kho\u1ea3n K12 v\u1eeba b\u1ecb x\u00f3a. K12 Rotation Engine s\u1ebd t\u1ef1 \u0111\u1ed9ng nh\u1eadn ra \u1edf l\u1ea7n rotation ti\u1ebfp theo.");await __9rSyncK12Rotation(false,"K12 b\u1ecb x\u00f3a b\u1edfi X\u00f3a 401/402")}catch(_){}',
         '    }catch(err){console.error(err)}',
         `    finally{${aliases.busySetter}(false);}`,
         '  }',
@@ -819,8 +813,6 @@ function patchQuotaPageBulk() {
         '        body:JSON.stringify({isActive:false})',
         '      })));',
         `      await b(${aliases.fetchAccounts},${aliases.page});`,
-        `      let __k12Hit=targets.some(e=>{let p=String(${aliases.quotaMap}[e.id]?.plan||"").toLowerCase();return p.includes("k12")});`,
-        '      if(__k12Hit&&typeof __9rSyncK12Rotation==="function")try{await __9rSyncK12Rotation(false,"K12 b\u1ecb t\u1eaft do h\u1ebft quota 0%")}catch(_){}',
         '    }catch(err){console.error(err)}',
         `    finally{${aliases.busySetter}(false);}`,
         '  }',
@@ -853,8 +845,6 @@ function patchQuotaPageBulk() {
         '        body:JSON.stringify({isActive:true})',
         '      })));',
         `      await b(${aliases.fetchAccounts},${aliases.page});`,
-        `      let __k12Hit=targets.some(e=>{let p=String(${aliases.quotaMap}[e.id]?.plan||"").toLowerCase();return p.includes("k12")});`,
-        '      if(__k12Hit&&typeof __9rSyncK12Rotation==="function")try{await __9rSyncK12Rotation(true,"K12 \u0111\u01b0\u1ee3c b\u1eadt b\u1edfi Turn on Available")}catch(_){}',
         '    }catch(err){console.error(err)}',
         `    finally{${aliases.busySetter}(false);}`,
         '  }',
@@ -1857,7 +1847,6 @@ function patchSmartPrioritySort() {
     }
 
     const smartFunctions = currentMarker + ';' +
-        'const __9rSyncK12Rotation=async(shouldEnable,reason)=>{try{let base="http://"+(window.location?window.location.hostname:"127.0.0.1")+":53220";let r=await fetch(base+"/api/k12-rotation/status");if(!r.ok)return;let s=await r.json();if(!shouldEnable&&s.enabled){await fetch(base+"/api/k12-rotation/toggle",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled:false})});alert("\u26a0\ufe0f K12 Rotation Engine \u0111\u00e3 t\u1ef1 \u0111\u1ed9ng t\u1eaft"+(reason?" \u2014 "+reason:""));if(typeof k12RotFetch==="function")try{k12RotFetch()}catch(_){}}else if(shouldEnable&&!s.enabled){if(confirm("K12 Rotation Engine \u0111ang t\u1eaft. B\u1ea1n v\u1eeba b\u1eadt K12 \u2014 b\u1eadt l\u1ea1i K12 Rotation Engine?")){await fetch(base+"/api/k12-rotation/toggle",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled:true})});if(typeof k12RotFetch==="function")try{k12RotFetch()}catch(_){}}}}catch(_){}};' +
         'function __9rBuildSmartPriorityPlan(accounts,quotaMap,options){' +
         'let opts=options||{};' +
         'let normPlan=p=>{if(!p)return"unknown";let l=String(p).toLowerCase().trim();if(l.includes("premium")||l.includes("ultra"))return"ultra";if(l.includes("pro"))return"pro";if(l.includes("plus"))return"plus";if(l.includes("team"))return"team";if(l.includes("enterprise"))return"enterprise";if(l.includes("k12"))return"k12";if(l.includes("free"))return"free";if(!l||l==="unknown")return"unknown";return l};' +
@@ -1906,7 +1895,6 @@ function patchSmartPrioritySort() {
         'await __9rRunQuotaPool(smartPlan,async item=>{try{let res=await fetch("/api/providers/"+item.id,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({isActive:item.isActive,priority:item.priority})});if(res.ok)ok++;else fail++}catch(err){fail++}},8);' +
         'setSmartPriResult("Done: "+ok+" updated, "+fail+" failed, "+skipped+" unknown plans skipped, "+smartPopulation.quotaFailures+" quota fetches failed.");' +
         `await b(${aliases.fetchAccounts},${aliases.page});` +
-        'if(smartPriActivation==="preferred-only"){await __9rSyncK12Rotation(smartPriPlan==="k12",smartPriPlan==="k12"?"K12 \u0111\u01b0\u1ee3c \u01b0u ti\u00ean b\u1edfi Smart Priority":"Smart Priority \u0111\u00e3 t\u1eaft K12 (\u01b0u ti\u00ean "+smartPriPlan.toUpperCase()+")")}' +
         '}catch(err){setSmartPriResult("Failed: "+(err.message||String(err)));alert(err.message||String(err))}' +
         `finally{${aliases.busySetter}(false);setSmartPriLoading(false)}` +
         '};' +
@@ -2063,7 +2051,6 @@ function patchBulkToggleByPlan() {
         'if(res.ok)ok++;else fail++}catch(err){fail++}},8);' +
         'setPlanToggleResult("Done: "+ok+" updated, "+fail+" failed");' +
         `await b(${aliases.fetchAccounts},${aliases.page});` +
-        'if(planToggleTarget==="k12"&&ok>0){await __9rSyncK12Rotation(planToggleAction==="activate",planToggleAction==="deactivate"?"Bulk Toggle \u0111\u00e3 t\u1eaft K12":"Bulk Toggle \u0111\u00e3 b\u1eadt K12")}' +
         '}catch(err){setPlanToggleResult("Failed: "+(err.message||String(err)))}' +
         `finally{setPlanToggleLoading(false);${aliases.busySetter}(false)}` +
         '};' +
@@ -2162,111 +2149,42 @@ function patchBulkToggleByPlan() {
 // PATCH 24: K12 Rotation Engine (API Server)
 // ============================================================
 function patchK12RotationEngine() {
-    console.log('[PATCH 24] K12 Rotation Engine');
+    console.log('[PATCH 24] K12 Rotation Engine (Retired)');
     const file = path.join(BASE, 'custom-server.js');
-    if (!fs.existsSync(file)) { console.log('  \u2717 custom-server.js not found'); return false; }
+    if (!fs.existsSync(file)) return true;
 
     let c = fs.readFileSync(file, 'utf8');
-    if (c.includes('__k12_runRotation')) {
-        console.log('  \u2192 Already patched');
-        return true;
-    }
+    let changed = false;
 
-    // Injection point 1: Before require("./server.js") or server startup — engine functions
-    let requireAnchor = null;
-    if (c.includes('require("./server.js");')) {
-        requireAnchor = 'require("./server.js");';
-    } else if (c.includes('const standalone = path.join(__dirname, "server.js");')) {
-        requireAnchor = 'const standalone = path.join(__dirname, "server.js");';
-    } else if (c.includes('if (require.main === module) {')) {
-        requireAnchor = 'if (require.main === module) {';
-    }
-    if (!requireAnchor) {
-        console.log('  ✗ server startup anchor not found in custom-server.js');
-        return false;
-    }
-
-    const engineCode = [
-        '/* K12 Rotation Engine (9router Patch 24) */',
-        'var __k12_stateFile="",__k12_apiPort=53220,__k12_state={enabled:true,config:{activePercent:20,workMinutes:60,restMinutesMin:30,restMinutesMax:60,checkIntervalSeconds:120},accounts:{},lastRotation:null,log:[]},__k12_timer=null,__k12_running=false;',
-        'var __k12_loadState=function(){},__k12_saveState=function(){},__k12_log=function(){},__k12_httpReq=function(){return Promise.resolve({status:0,data:null})},__k12_isK12=function(){return false},__k12_runRotation=function(){},__k12_startTimer=function(){},__k12_stopTimer=function(){},__k12_handleApi=function(u,req,res){res.writeHead(503);res.end()};',
-        'try{(function(){',
-        'var __req=eval("require"),__fs=__req("fs"),__path=__req("path"),__os=__req("os"),__crypto=__req("crypto"),__http=__req("http");',
-        '__k12_stateFile=__path.join(process.env.APPDATA||__os.homedir(),"9router","k12-rotation.json");',
-        '__k12_apiPort=parseInt(process.env.PORT,10)||53220;',
-        'var __k12_dataDir=__path.join(process.env.APPDATA||__os.homedir(),"9router");',
-        'var __k12_cliToken="";try{var __mid=__fs.readFileSync(__path.join(__k12_dataDir,"machine-id"),"utf8").trim();var __csec=__fs.readFileSync(__path.join(__k12_dataDir,"auth","cli-secret"),"utf8").trim();__k12_cliToken=__crypto.createHash("sha256").update(__mid+"9r-cli-auth"+__csec).digest("hex").substring(0,16);console.log("[K12 Rotation] CLI token computed")}catch(e){console.log("[K12 Rotation] CLI token error:"+e.message)};',
-        '',
-        '__k12_loadState=function(){try{if(__fs.existsSync(__k12_stateFile)){var d=JSON.parse(__fs.readFileSync(__k12_stateFile,"utf8"));if(d.config)Object.assign(__k12_state.config,d.config);__k12_state.enabled=!!d.enabled;__k12_state.accounts=d.accounts||{};__k12_state.lastRotation=d.lastRotation||null;__k12_state.log=Array.isArray(d.log)?d.log:[]}}catch(e){console.log("[K12 Rotation] Load error:"+e.message)}};',
-        '',
-        '__k12_saveState=function(){try{var dir=__path.dirname(__k12_stateFile);if(!__fs.existsSync(dir))__fs.mkdirSync(dir,{recursive:true});if(__k12_state.log&&__k12_state.log.length>100)__k12_state.log=__k12_state.log.slice(-50);__fs.writeFileSync(__k12_stateFile,JSON.stringify(__k12_state,null,2),"utf8")}catch(e){console.log("[K12 Rotation] Save error:"+e.message)}};',
-        '',
-        '__k12_log=function(msg){var entry=new Date().toISOString().slice(0,19).replace("T"," ")+" "+msg;console.log("[K12 Rotation] "+msg);if(!__k12_state.log)__k12_state.log=[];__k12_state.log.push(entry)};',
-        '',
-        '__k12_httpReq=function(method,reqPath,body){return new Promise(function(resolve,reject){var hdrs={"Content-Type":"application/json"};if(__k12_cliToken)hdrs["x-9r-cli-token"]=__k12_cliToken;var opts={hostname:"127.0.0.1",port:__k12_apiPort,path:reqPath,method:method,headers:hdrs};var r=__http.request(opts,function(res){var data="";res.on("data",function(ch){data+=ch});res.on("end",function(){try{resolve({status:res.statusCode,data:JSON.parse(data)})}catch(e){resolve({status:res.statusCode,data:null})}})});r.on("error",reject);r.setTimeout(15000,function(){r.destroy();reject(new Error("timeout"))});if(body)r.write(JSON.stringify(body));r.end()})};',
-        '',
-        '__k12_isK12=function(acc){var plan=String((acc&&acc.providerSpecificData&&acc.providerSpecificData.chatgptPlanType)||(acc&&acc.plan)||"").toLowerCase().trim();var em=String(acc.email||acc.name||"").toLowerCase().trim();var k12Emails=["administrator@vip.yeutiengnhat.com.vn","chuongtrinh@vip.yeutiengnhat.com.vn","alenwhasington@hainguyen.net"];return plan.indexOf("k12")>=0||k12Emails.indexOf(em)>=0};',
-        '__k12_maskEmail=function(email){if(!email||typeof email!=="string")return email;var at=email.indexOf("@");if(at<0)return email;var user=email.substring(0,at),domain=email.substring(at+1);var m=domain.match(/(\\.(?:com|net|org|gov|edu|co)\\.[a-z]{2,})$/i)||domain.match(/(\\.[a-z]{2,})$/i);var tld=m?m[1]:"";var main=domain.slice(0,domain.length-tld.length);var p=main.replace(/[^a-zA-Z0-9]/g,"").slice(0,2)||main.slice(0,2);return user+"@"+p+"***"+tld};',
-        '',
-        '__k12_runRotation=function(){if(__k12_running||!__k12_state.enabled)return;__k12_running=true;(async function(){try{',
-        '  var allAcc=[],pg=1,tp=1;while(pg<=tp){var resp=await __k12_httpReq("GET","/api/providers/client?pageSize=500&accountStatus=all&page="+pg);if(!resp||resp.status!==200||!resp.data)break;var batch=Array.isArray(resp.data.connections)?resp.data.connections:[];allAcc=allAcc.concat(batch);var pag=resp.data.pagination||{};tp=Number(pag.totalPages)||pg;if(batch.length===0)break;pg++}',
-        '  if(allAcc.length===0){__k12_running=false;return}',
-        '  for(var di=0;di<allAcc.length;di++){if(!allAcc[di].providerSpecificData||!allAcc[di].providerSpecificData.chatgptPlanType){try{var dr=await __k12_httpReq("GET","/api/providers/"+allAcc[di].id);if(dr&&dr.status===200&&dr.data&&dr.data.connection){allAcc[di]=dr.data.connection}}catch(e){}}}',
-        '  var k12=allAcc.filter(__k12_isK12);__k12_log("Found "+allAcc.length+" total, "+k12.length+" K12");if(k12.length===0){__k12_running=false;return}',
-        '  var usageMap={};for(var ui=0;ui<k12.length;ui++){try{var ur=await __k12_httpReq("GET","/api/usage/"+k12[ui].id);if(ur&&ur.status===200&&ur.data){usageMap[k12[ui].id]=ur.data}}catch(e){}}',
-        '  var __scoreAcc=function(id){var u=usageMap[id];if(!u||!u.quotas)return 0.5;var ss=u.quotas.session,wk=u.quotas.weekly;var sPct=ss?(ss.remaining||0)/(ss.total||1):1;var wPct=wk?(wk.remaining||0)/(wk.total||1):1;var trk=__k12_state.accounts[id],restBonus=0;if(trk&&trk.activatedAt){var elapsed=Date.now()-new Date(trk.activatedAt).getTime();if(elapsed>3600000)restBonus=0.1}return sPct*0.6+wPct*0.3+restBonus};',
-        '  var cfg=__k12_state.config,now=Date.now();',
-        '  var targetActive=Math.max(1,Math.round(k12.length*cfg.activePercent/100));',
-        '  var toDeact=[],eligible=[],activeCount=0;',
-        '  for(var i=0;i<k12.length;i++){var acc=k12[i],id=acc.id,isAct=acc.isActive!==false,trk=__k12_state.accounts[id],u=usageMap[id];if(isAct){activeCount++;var sessOut=u&&u.quotas&&u.quotas.session&&u.quotas.session.remaining===0;var weekOut=u&&u.quotas&&u.quotas.weekly&&u.quotas.weekly.remaining===0;var limitHit=u&&u.limitReached;if(sessOut||weekOut||limitHit){toDeact.push(id)}else if(!trk||!trk.activatedAt){var jt=Math.random()*10*60000;__k12_state.accounts[id]={email:acc.email||acc.name||null,activatedAt:new Date(now).toISOString(),scheduledRestAt:new Date(now+cfg.workMinutes*60000+jt).toISOString(),restUntil:null}}else if(trk.scheduledRestAt&&now>new Date(trk.scheduledRestAt).getTime()){toDeact.push(id)}}else{var wkRemain=u&&u.quotas&&u.quotas.weekly?u.quotas.weekly.remaining:-1;if(wkRemain===0)continue;if(trk&&trk.restUntil){if(now>new Date(trk.restUntil).getTime())eligible.push(id)}else{eligible.push(id)}}}',
-        '  __k12_log("Classify: active="+activeCount+" toDeact="+toDeact.length+" eligible="+eligible.length+" target="+targetActive);',
-        '  var activated=0,deactivated=0;',
-        '  for(var d=0;d<toDeact.length;d++){var du=usageMap[toDeact[d]],rdur;var dSessOut=du&&du.quotas&&du.quotas.session&&du.quotas.session.remaining===0;var dWkOut=du&&du.quotas&&du.quotas.weekly&&du.quotas.weekly.remaining===0;if(dWkOut){rdur=du.quotas.weekly.resetAt?Math.max(0,new Date(du.quotas.weekly.resetAt).getTime()-now):86400000}else if(dSessOut&&du.quotas.session.resetAt){rdur=Math.max(0,new Date(du.quotas.session.resetAt).getTime()-now);if(rdur<60000)rdur=cfg.restMinutesMin*60000}else{rdur=(cfg.restMinutesMin+Math.random()*(cfg.restMinutesMax-cfg.restMinutesMin))*60000}var ok=await __k12_httpReq("PUT","/api/providers/"+toDeact[d],{isActive:false});if(ok&&ok.status>=200&&ok.status<300){var prevE=__k12_state.accounts[toDeact[d]]?__k12_state.accounts[toDeact[d]].email:null;__k12_state.accounts[toDeact[d]]={email:prevE,activatedAt:null,scheduledRestAt:null,restUntil:new Date(now+rdur).toISOString()};deactivated++;activeCount--;__k12_log("Deact "+toDeact[d].substring(0,8)+(dSessOut?" (session=0)":dWkOut?" (weekly=0)":" (time)")+" rest="+(rdur/60000).toFixed(0)+"m")}}',
-        '  if(activeCount>targetActive){var actK12=k12.filter(function(a){return a.isActive!==false&&toDeact.indexOf(a.id)<0}).sort(function(a,b){return __scoreAcc(a.id)-__scoreAcc(b.id)});var excess=activeCount-targetActive;__k12_log("Excess deact: "+excess+" candidates="+actK12.length);for(var x=0;x<actK12.length&&excess>0;x++){var xdu=usageMap[actK12[x].id],xrdur;var xSessOut=xdu&&xdu.quotas&&xdu.quotas.session&&xdu.quotas.session.remaining===0;if(xSessOut&&xdu.quotas.session.resetAt){xrdur=Math.max(0,new Date(xdu.quotas.session.resetAt).getTime()-now)}else{xrdur=(cfg.restMinutesMin+Math.random()*(cfg.restMinutesMax-cfg.restMinutesMin))*60000}try{var rr=await __k12_httpReq("PUT","/api/providers/"+actK12[x].id,{isActive:false});__k12_log("PUT "+actK12[x].id.substring(0,8)+" status="+(rr?rr.status:"null"));if(rr&&rr.status>=200&&rr.status<300){var prevEx=__k12_state.accounts[actK12[x].id]?__k12_state.accounts[actK12[x].id].email:actK12[x].email;__k12_state.accounts[actK12[x].id]={email:prevEx,activatedAt:null,scheduledRestAt:null,restUntil:new Date(now+xrdur).toISOString()};deactivated++;activeCount--;excess--}}catch(pe){__k12_log("PUT error: "+pe.message)}}}',
-        '  if(activeCount<targetActive&&eligible.length>0){eligible.sort(function(a,b){return __scoreAcc(b)-__scoreAcc(a)});var needed=targetActive-activeCount;for(var a=0;a<Math.min(needed,eligible.length);a++){var eid=eligible[a],jit=Math.random()*10*60000;var elObj=k12.find(function(k){return k.id===eid});var elEmail=elObj?(elObj.email||elObj.name):null;var ar=await __k12_httpReq("PUT","/api/providers/"+eid,{isActive:true});if(ar&&ar.status>=200&&ar.status<300){__k12_state.accounts[eid]={email:elEmail,activatedAt:new Date(now).toISOString(),scheduledRestAt:new Date(now+cfg.workMinutes*60000+jit).toISOString(),restUntil:null};activated++;activeCount++}}}',
-        '  if(activeCount===0&&k12.length>0){var bestId=null,bestReset=Infinity;for(var bi=0;bi<k12.length;bi++){var bu=usageMap[k12[bi].id];if(bu&&bu.quotas&&bu.quotas.session&&bu.quotas.session.resetAt){var rt=new Date(bu.quotas.session.resetAt).getTime();if(rt<bestReset){bestReset=rt;bestId=k12[bi].id}}}if(bestId){var bObj=k12.find(function(k){return k.id===bestId});var bEmail=bObj?(bObj.email||bObj.name):null;var er=await __k12_httpReq("PUT","/api/providers/"+bestId,{isActive:true});if(er&&er.status>=200&&er.status<300){__k12_state.accounts[bestId]={email:bEmail,activatedAt:new Date(now).toISOString(),scheduledRestAt:new Date(now+cfg.workMinutes*60000).toISOString(),restUntil:null};activated++;activeCount++;__k12_log("Emergency: activated "+bestId.substring(0,8)+" (nearest session reset)")}}}',
-        '  var k12Ids={};k12.forEach(function(a){k12Ids[a.id]=true;if(!__k12_state.accounts[a.id]){__k12_state.accounts[a.id]={activatedAt:a.isActive!==false?new Date(now).toISOString():null,scheduledRestAt:null,restUntil:null}}__k12_state.accounts[a.id].email=a.email||a.name||__k12_state.accounts[a.id].email||null});Object.keys(__k12_state.accounts).forEach(function(id){if(!k12Ids[id])delete __k12_state.accounts[id]});',
-        '  __k12_state.lastRotation=new Date(now).toISOString();',
-        '  if(activated>0||deactivated>0)__k12_log("Rotation: +"+activated+" -"+deactivated+" Active:"+activeCount+"/"+k12.length+" (target "+targetActive+")");',
-        '  __k12_saveState();',
-        '}catch(e){__k12_log("Error: "+(e.message||String(e)))}finally{__k12_running=false}})()};',
-        '__k12_restoreAllAccounts=function(){(async function(){try{var allAcc=[],pg=1,tp=1;while(pg<=tp){var resp=await __k12_httpReq("GET","/api/providers/client?pageSize=500&accountStatus=all&page="+pg);if(!resp||resp.status!==200||!resp.data)break;var batch=Array.isArray(resp.data.connections)?resp.data.connections:[];allAcc=allAcc.concat(batch);var pag=resp.data.pagination||{};tp=Number(pag.totalPages)||pg;if(batch.length===0)break;pg++}for(var di=0;di<allAcc.length;di++){if(!allAcc[di].providerSpecificData||!allAcc[di].providerSpecificData.chatgptPlanType){try{var dr=await __k12_httpReq("GET","/api/providers/"+allAcc[di].id);if(dr&&dr.status===200&&dr.data&&dr.data.connection){allAcc[di]=dr.data.connection}}catch(e){}}}var k12=allAcc.filter(__k12_isK12);var restored=0;for(var i=0;i<k12.length;i++){if(k12[i].isActive===false){var r=await __k12_httpReq("PUT","/api/providers/"+k12[i].id,{isActive:true});if(r&&r.status>=200&&r.status<300)restored++}}__k12_state.accounts={};__k12_saveState();__k12_log("Rotation disabled: "+restored+"/"+k12.length+" K12 accounts restored to active")}catch(e){__k12_log("Restore error: "+(e.message||String(e)))}})()};',
-        '',
-        '__k12_startTimer=function(){if(__k12_timer)clearInterval(__k12_timer);if(!__k12_state.enabled)return;__k12_timer=setInterval(__k12_runRotation,(__k12_state.config.checkIntervalSeconds||120)*1000);__k12_log(\"Timer started (interval: \"+(__k12_state.config.checkIntervalSeconds||120)+\"s)\")};',
-        '',
-        '__k12_stopTimer=function(){if(__k12_timer){clearInterval(__k12_timer);__k12_timer=null}__k12_log(\"Timer stopped\")};',
-        '',
-        '__k12_handleApi=function(requestUrl,req,res){',
-        '  res.setHeader(\"Access-Control-Allow-Origin\",\"*\");res.setHeader(\"Access-Control-Allow-Methods\",\"GET, PUT, POST, OPTIONS\");res.setHeader(\"Access-Control-Allow-Headers\",\"Content-Type\");',
-        '  if(req.method===\"OPTIONS\"){res.writeHead(204);return res.end()}',
-        '  var sendJson=function(st,dt){res.writeHead(st,{\"Content-Type\":\"application/json\"});res.end(JSON.stringify(dt))};',
-        '  var pn=requestUrl.pathname;',
-        '  if(pn===\"/api/k12-rotation/status\"&&req.method===\"GET\"){var now=Date.now();if(__k12_state.enabled&&__k12_state.lastRotation){var elapsed=now-new Date(__k12_state.lastRotation).getTime();if(elapsed>=(__k12_state.config.checkIntervalSeconds||120)*1000){__k12_runRotation()}}var accs=Object.entries(__k12_state.accounts||{}).map(function(p){var id=p[0],info=p[1],isAct=!!(info.activatedAt&&!info.restUntil);return{id:id,email:__k12_maskEmail(info.email||null),isActive:isAct,activatedAt:info.activatedAt||null,scheduledRestAt:info.scheduledRestAt||null,restUntil:info.restUntil||null,minutesUntilRest:isAct&&info.scheduledRestAt?Math.max(0,Math.round((new Date(info.scheduledRestAt).getTime()-now)/60000)):null,minutesUntilEligible:!isAct&&info.restUntil?Math.max(0,Math.round((new Date(info.restUntil).getTime()-now)/60000)):0}});var actCnt=accs.filter(function(a){return a.isActive}).length;return sendJson(200,{enabled:__k12_state.enabled,totalK12:accs.length,activeCount:actCnt,restingCount:accs.length-actCnt,targetActive:Math.max(1,Math.round(accs.length*__k12_state.config.activePercent/100)),config:__k12_state.config,lastRotation:__k12_state.lastRotation,timerRunning:!!__k12_timer,accounts:accs,recentLog:(__k12_state.log||[]).slice(-20)})}',
-        '  if(pn===\"/api/k12-rotation/toggle\"&&req.method===\"POST\"){var body=\"\";req.on(\"data\",function(ch){body+=ch});req.on(\"end\",function(){try{var dt=JSON.parse(body);__k12_state.enabled=!!dt.enabled;if(__k12_state.enabled){__k12_startTimer();setTimeout(__k12_runRotation,2000)}else{__k12_stopTimer();__k12_restoreAllAccounts()}__k12_saveState();return sendJson(200,{enabled:__k12_state.enabled})}catch(e){return sendJson(400,{error:e.message})}});return}',
-        '  if(pn===\"/api/k12-rotation/config\"&&req.method===\"PUT\"){var body=\"\";req.on(\"data\",function(ch){body+=ch});req.on(\"end\",function(){try{var dt=JSON.parse(body),cf=__k12_state.config;if(dt.activePercent!==undefined)cf.activePercent=Math.max(5,Math.min(100,Number(dt.activePercent)));if(dt.workMinutes!==undefined)cf.workMinutes=Math.max(10,Math.min(180,Number(dt.workMinutes)));if(dt.restMinutesMin!==undefined)cf.restMinutesMin=Math.max(5,Math.min(120,Number(dt.restMinutesMin)));if(dt.restMinutesMax!==undefined)cf.restMinutesMax=Math.max(cf.restMinutesMin,Math.min(180,Number(dt.restMinutesMax)));if(dt.checkIntervalSeconds!==undefined)cf.checkIntervalSeconds=Math.max(30,Math.min(600,Number(dt.checkIntervalSeconds)));if(__k12_state.enabled){__k12_stopTimer();__k12_startTimer()}__k12_saveState();__k12_log(\"Config updated\");return sendJson(200,{config:cf})}catch(e){return sendJson(400,{error:e.message})}});return}',
-        '  if(pn===\"/api/k12-rotation/force\"&&(req.method===\"POST\"||req.method===\"GET\")){if(!__k12_state.enabled)return sendJson(400,{error:\"Rotation is not enabled\"});__k12_runRotation();return sendJson(200,{message:\"Rotation triggered\"})}',
-        '  return sendJson(404,{error:\"Unknown K12 rotation endpoint\"})};',
-        '})()}catch(e){console.log(\"[K12 Rotation] Engine init skipped: \"+e.message)}',
-    ].join('\n');
-
-    // Injection point 2: API routing inside wrapped function
-    const handlerReturn = 'return handler(req, res);';
-    if (!c.includes(handlerReturn)) {
-        console.log('  \u2717 handler return not found');
-        return false;
-    }
-
+    // Clean up API routing
     const apiRouting = 'if(requestUrl&&requestUrl.pathname.startsWith("/api/k12-rotation")){return __k12_handleApi(requestUrl,req,res)}\n    ';
+    if (c.includes(apiRouting)) {
+        c = c.replace(apiRouting, '');
+        changed = true;
+    }
 
-    // Injection point 3: Timer startup after require
-    const timerStartup = '\ntry{setTimeout(function(){__k12_loadState();if(__k12_state.enabled){__k12_startTimer();setTimeout(__k12_runRotation,3000)}console.log("[K12 Rotation] Engine initialized (enabled: "+__k12_state.enabled+")")},8000)}catch(e){}\n';
+    // Clean up engine code and timer startup
+    if (c.includes('/* K12 Rotation Engine (9router Patch 24) */')) {
+        const startMarker = '/* K12 Rotation Engine (9router Patch 24) */';
+        const endMarker = 'const standalone = path.join(__dirname, "server.js");';
+        const startIndex = c.indexOf(startMarker);
+        const endIndex = c.indexOf(endMarker);
+        if (startIndex !== -1 && endIndex !== -1) {
+            const timerStartup = '\ntry{setTimeout(function(){__k12_loadState();if(__k12_state.enabled){__k12_startTimer();setTimeout(__k12_runRotation,3000)}console.log("[K12 Rotation] Engine initialized (enabled: "+__k12_state.enabled+")")},8000)}catch(e){}\n';
+            c = c.substring(0, startIndex) + c.substring(endIndex);
+            if (c.includes(timerStartup)) {
+                c = c.replace(timerStartup, '');
+            }
+            changed = true;
+        }
+    }
 
-    // Apply injections
-    c = c.replace(requireAnchor, engineCode + '\n\n' + requireAnchor + timerStartup);
-    c = c.replace(handlerReturn, apiRouting + handlerReturn);
-
-    fs.writeFileSync(file, c, 'utf8');
-    console.log('  \u2705 Added K12 rotation engine to custom-server.js');
+    if (changed) {
+        fs.writeFileSync(file, c, 'utf8');
+        console.log('  ✅ Removed legacy K12 rotation engine from custom-server.js');
+    } else {
+        console.log('  → K12 rotation engine not present in custom-server.js');
+    }
     return true;
 }
 
@@ -2312,165 +2230,7 @@ function patchDefaultAccountRouting() {
 // PATCH 25: K12 Rotation Dashboard UI
 // ============================================================
 function patchK12RotationDashboard() {
-    console.log('[PATCH 25] K12 Rotation Dashboard');
-    const dir = path.join(BUILD, 'static/chunks/app/(dashboard)/dashboard/quota');
-    if (!fs.existsSync(dir)) { console.log('  \u2717 Dir not found'); return false; }
-    const pageFile = fs.readdirSync(dir).find(f => f.startsWith('page-') && f.endsWith('.js'));
-    if (!pageFile) { console.log('  \u2717 File not found'); return false; }
-
-    const file = path.join(dir, pageFile);
-    let c = fs.readFileSync(file, 'utf8');
-    const aliases = getQuotaBundleAliases(c);
-
-    if (c.includes('k12RotOpen')) {
-        console.log('  \u2192 Already patched');
-        return true;
-    }
-
-    // 1. State injection — after planToggleResult state (added by Patch 23)
-    const stateAnchor = `,[planToggleResult,setPlanToggleResult]=(0,${aliases.react}.useState)(null)`;
-    if (!c.includes(stateAnchor)) {
-        console.log('  \u2717 Plan Toggle state anchor not found');
-        return false;
-    }
-    c = c.replace(stateAnchor, stateAnchor +
-        `,[k12RotOpen,setK12RotOpen]=(0,${aliases.react}.useState)(false)` +
-        `,[k12RotStatus,setK12RotStatus]=(0,${aliases.react}.useState)(null)` +
-        `,[k12RotLoading,setK12RotLoading]=(0,${aliases.react}.useState)(false)` +
-        `,[k12RotSaving,setK12RotSaving]=(0,${aliases.react}.useState)(false)` +
-        `,[k12RotCfg,setK12RotCfg]=(0,${aliases.react}.useState)({activePercent:20,workMinutes:60,restMinutesMin:30,restMinutesMax:60})`
-    );
-
-    // 2. Functions injection — before bulkToggleByPlan
-    const funcAnchor = 'const bulkToggleByPlan=async()=>';
-    if (!c.includes(funcAnchor)) {
-        console.log('  \u2717 bulkToggleByPlan function anchor not found');
-        return false;
-    }
-
-    const k12Funcs =
-        'const __k12ApiBase="http://"+(typeof window!=="undefined"&&window.location?window.location.hostname:"127.0.0.1")+":53220";' +
-        `const k12RotPageRefresh=()=>{try{if(typeof ${aliases.fetchAccounts}==="function")${aliases.fetchAccounts}()}catch(_e){}};` +
-        'const k12RotFetch=async()=>{setK12RotLoading(true);try{let r=await fetch(__k12ApiBase+"/api/k12-rotation/status");if(r.ok){let d=await r.json();setK12RotStatus(d);if(d.config)setK12RotCfg({activePercent:d.config.activePercent||20,workMinutes:d.config.workMinutes||60,restMinutesMin:d.config.restMinutesMin||30,restMinutesMax:d.config.restMinutesMax||60})}else{setK12RotStatus(null)}}catch(e){setK12RotStatus(null);console.error("K12 fetch error:",e)}finally{setK12RotLoading(false)}};' +
-        'const k12RotToggle=async(enabled)=>{setK12RotSaving(true);try{let r=await fetch(__k12ApiBase+"/api/k12-rotation/toggle",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled})});if(r.ok){await k12RotFetch();k12RotPageRefresh()}}catch(e){alert("Failed: "+e.message)}finally{setK12RotSaving(false)}};' +
-        'const k12RotSaveCfg=async()=>{setK12RotSaving(true);try{let r=await fetch(__k12ApiBase+"/api/k12-rotation/config",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(k12RotCfg)});if(r.ok){await k12RotFetch();k12RotPageRefresh()}else alert("Save failed")}catch(e){alert("Failed: "+e.message)}finally{setK12RotSaving(false)}};' +
-        'const k12RotForce=async()=>{setK12RotSaving(true);try{await fetch(__k12ApiBase+"/api/k12-rotation/force",{method:"POST"});await new Promise(r=>setTimeout(r,2500));await k12RotFetch();k12RotPageRefresh()}catch(e){alert("Failed: "+e.message)}finally{setK12RotSaving(false)}};' +
-        funcAnchor;
-
-    c = c.replace(funcAnchor, k12Funcs);
-
-    // 3. Button injection — after Plan Toggle button
-    const planToggleBtnEnd = '(0,a.jsx)("span",{className:"hidden sm:inline",children:"T\u1eaft/B\u1eadt theo G\u00f3i"})]})'
-    if (!c.includes(planToggleBtnEnd)) {
-        console.log('  \u2717 Plan Toggle button anchor not found');
-        return false;
-    }
-
-    const k12Button = planToggleBtnEnd + ',' +
-        `(0,a.jsxs)("button",{type:"button",onClick:()=>{setK12RotOpen(true);k12RotFetch()},disabled:${aliases.busy}||k12RotLoading,` +
-        'className:"flex h-8 shrink-0 items-center gap-1 rounded-lg border border-teal-500/30 px-2 text-xs text-teal-600 transition-colors hover:bg-teal-500/10 dark:text-teal-400 disabled:opacity-50",' +
-        'title:"Qu\u1ea3n l\u00fd ngh\u1ec9 ng\u01a1i K12",' +
-        'children:[(0,a.jsx)("span",{className:"material-symbols-outlined text-[14px]",children:"sync"}),' +
-        '(0,a.jsx)("span",{className:"hidden sm:inline",children:"K12 Rotation"})]})';
-
-    c = c.replace(planToggleBtnEnd, k12Button);
-
-    // 4. Modal injection — before the Plan Toggle modal (or grid)
-    const gridAnchor = c.includes('(0,a.jsx)("div",{className:"grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3",children:planFilteredEZ')
-        ? '(0,a.jsx)("div",{className:"grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3",children:planFilteredEZ'
-        : '(0,a.jsx)("div",{className:"grid grid-cols-1 md:grid-cols-2 gap-3",children:planFilteredEZ';
-    if (!c.includes(gridAnchor)) {
-        console.log('  \u2717 Grid anchor not found');
-        return false;
-    }
-
-    const k12Modal =
-        'k12RotOpen&&(0,a.jsx)("div",{className:"fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4",' +
-        'onClick:e=>{if(e.target===e.currentTarget&&!k12RotSaving)setK12RotOpen(false)},' +
-        'children:(0,a.jsxs)("div",{role:"dialog","aria-modal":true,"aria-label":"K12 Rotation",' +
-        'className:"w-[560px] max-w-[calc(100vw-2rem)] max-h-[85vh] overflow-y-auto rounded-xl border border-black/10 bg-surface-1 p-5 shadow-2xl dark:border-white/10",children:[' +
-        // Title row
-        '(0,a.jsxs)("div",{className:"flex items-center justify-between",children:[' +
-        '(0,a.jsx)("h3",{className:"text-lg font-bold text-text-primary",children:"K12 Rotation — Qu\u1ea3n l\u00fd Ngh\u1ec9 ng\u01a1i"}),' +
-        // Enable/Disable toggle
-        '(0,a.jsx)("button",{type:"button",onClick:()=>k12RotToggle(!(k12RotStatus&&k12RotStatus.enabled)),disabled:k12RotSaving||k12RotLoading,' +
-        'className:"h-7 rounded-full px-3 text-xs font-medium transition-colors "+(k12RotStatus&&k12RotStatus.enabled?"bg-teal-600 text-white hover:bg-teal-700":"bg-black/5 text-text-muted hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/20"),' +
-        'children:k12RotStatus&&k12RotStatus.enabled?"\u2714 \u0110ang b\u1eadt":"\u25CB T\u1eaft"})]}),' +
-        '(0,a.jsx)("p",{className:"mt-1 text-xs text-text-muted",children:"T\u1ef1 \u0111\u1ed9ng xoay v\u00f2ng t\u00e0i kho\u1ea3n K12: ch\u1ec9 duy tr\u00ec 10-30% active, ngh\u1ec9 ng\u01a1i sau 1h ho\u1ea1t \u0111\u1ed9ng."}),' +
-        // Status bar
-        'k12RotStatus&&(0,a.jsxs)("div",{className:"mt-3 rounded-lg bg-black/[0.03] dark:bg-white/[0.05] p-3 space-y-1",children:[' +
-        '(0,a.jsxs)("div",{className:"flex items-center gap-2 text-sm",children:[' +
-        '(0,a.jsx)("span",{className:"font-bold text-teal-600 dark:text-teal-400",children:k12RotStatus.activeCount||0}),' +
-        '(0,a.jsx)("span",{className:"text-text-muted",children:"/"}),' +
-        '(0,a.jsx)("span",{className:"text-text-primary",children:k12RotStatus.totalK12||0}),' +
-        '(0,a.jsx)("span",{className:"text-text-muted",children:"K12 active"}),' +
-        '(0,a.jsx)("span",{className:"text-text-muted",children:"(target: "+(k12RotStatus.targetActive||0)+")"})' +
-        ']}),' +
-        'k12RotStatus.lastRotation&&(0,a.jsx)("p",{className:"text-xs text-text-muted",children:"L\u1ea7n rotation cu\u1ed1i: "+new Date(k12RotStatus.lastRotation).toLocaleString()})' +
-        ']}),' +
-        // Config section
-        '(0,a.jsxs)("div",{className:"mt-4 space-y-3",children:[' +
-        '(0,a.jsx)("h4",{className:"text-sm font-semibold text-text-primary",children:"C\u1ea5u h\u00ecnh"}),' +
-        // Active percent
-        '(0,a.jsxs)("label",{className:"flex items-center gap-3",children:[' +
-        '(0,a.jsx)("span",{className:"w-28 text-xs text-text-muted",children:"% Active"}),' +
-        '(0,a.jsx)("input",{type:"range",min:5,max:100,step:1,value:k12RotCfg.activePercent,onChange:e=>setK12RotCfg(p=>({...p,activePercent:Number(e.target.value)})),className:"flex-1 accent-teal-500"}),' +
-        '(0,a.jsx)("span",{className:"w-10 text-right text-xs font-medium text-teal-600 dark:text-teal-400",children:k12RotCfg.activePercent+"%"})' +
-        ']}),' +
-        // Work duration
-        '(0,a.jsxs)("label",{className:"flex items-center gap-3",children:[' +
-        '(0,a.jsx)("span",{className:"w-28 text-xs text-text-muted",children:"L\u00e0m vi\u1ec7c (ph\u00fat)"}),' +
-        '(0,a.jsx)("input",{type:"number",min:10,max:180,value:k12RotCfg.workMinutes,onChange:e=>setK12RotCfg(p=>({...p,workMinutes:Number(e.target.value)})),' +
-        'className:"h-8 w-20 rounded-lg border border-black/10 bg-black/[0.02] px-2 text-sm text-text-primary outline-none dark:border-white/10 dark:bg-white/[0.03]"})' +
-        ']}),' +
-        // Rest min
-        '(0,a.jsxs)("label",{className:"flex items-center gap-3",children:[' +
-        '(0,a.jsx)("span",{className:"w-28 text-xs text-text-muted",children:"Ngh\u1ec9 t\u1ed1i thi\u1ec3u"}),' +
-        '(0,a.jsx)("input",{type:"number",min:5,max:120,value:k12RotCfg.restMinutesMin,onChange:e=>setK12RotCfg(p=>({...p,restMinutesMin:Number(e.target.value)})),' +
-        'className:"h-8 w-20 rounded-lg border border-black/10 bg-black/[0.02] px-2 text-sm text-text-primary outline-none dark:border-white/10 dark:bg-white/[0.03]"}),' +
-        '(0,a.jsx)("span",{className:"text-xs text-text-muted",children:"ph\u00fat"})' +
-        ']}),' +
-        // Rest max
-        '(0,a.jsxs)("label",{className:"flex items-center gap-3",children:[' +
-        '(0,a.jsx)("span",{className:"w-28 text-xs text-text-muted",children:"Ngh\u1ec9 t\u1ed1i \u0111a"}),' +
-        '(0,a.jsx)("input",{type:"number",min:5,max:180,value:k12RotCfg.restMinutesMax,onChange:e=>setK12RotCfg(p=>({...p,restMinutesMax:Number(e.target.value)})),' +
-        'className:"h-8 w-20 rounded-lg border border-black/10 bg-black/[0.02] px-2 text-sm text-text-primary outline-none dark:border-white/10 dark:bg-white/[0.03]"}),' +
-        '(0,a.jsx)("span",{className:"text-xs text-text-muted",children:"ph\u00fat"})' +
-        ']})' +
-        ']}),' +
-        // Account list
-        'k12RotStatus&&k12RotStatus.accounts&&k12RotStatus.accounts.length>0&&(0,a.jsxs)("div",{className:"mt-4",children:[' +
-        '(0,a.jsx)("h4",{className:"text-sm font-semibold text-text-primary mb-2",children:"T\u00e0i kho\u1ea3n K12 ("+k12RotStatus.accounts.length+")"}),' +
-        '(0,a.jsx)("div",{className:"max-h-40 overflow-y-auto rounded-lg border border-black/5 dark:border-white/5",children:' +
-        '(0,a.jsx)("table",{className:"w-full text-xs",children:(0,a.jsxs)("tbody",{children:k12RotStatus.accounts.slice(0,50).map((acc,idx)=>' +
-        '(0,a.jsxs)("tr",{className:"border-b border-black/5 dark:border-white/5 last:border-0",children:[' +
-        '(0,a.jsx)("td",{className:"px-2 py-1 font-mono text-text-muted",children:acc.id.slice(0,12)+"..."}),' +
-        '(0,a.jsx)("td",{className:"px-2 py-1",children:(0,a.jsx)("span",{className:"inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium "+(acc.isActive?"bg-emerald-500/10 text-emerald-600 dark:text-emerald-400":"bg-orange-500/10 text-orange-600 dark:text-orange-400"),children:acc.isActive?"Active":"Resting"})}),' +
-        '(0,a.jsx)("td",{className:"px-2 py-1 text-text-muted",children:acc.isActive?(acc.minutesUntilRest!=null?acc.minutesUntilRest+"m \u2192 rest":"-"):(acc.minutesUntilEligible>0?acc.minutesUntilEligible+"m \u2192 eligible":"Ready")})' +
-        ']},idx))})})})' +
-        ']}),' +
-        // Recent logs
-        'k12RotStatus&&k12RotStatus.recentLog&&k12RotStatus.recentLog.length>0&&(0,a.jsxs)("details",{className:"mt-3",children:[' +
-        '(0,a.jsx)("summary",{className:"cursor-pointer text-xs text-text-muted hover:text-text-primary",children:"Log g\u1ea7n \u0111\u00e2y"}),' +
-        '(0,a.jsx)("div",{className:"mt-1 max-h-24 overflow-y-auto rounded bg-black/[0.03] dark:bg-white/[0.05] p-2 text-[10px] font-mono text-text-muted",children:k12RotStatus.recentLog.map((l,i)=>(0,a.jsx)("div",{children:l},i))})' +
-        ']}),' +
-        // Footer buttons
-        '(0,a.jsxs)("div",{className:"mt-4 flex justify-end gap-2",children:[' +
-        '(0,a.jsx)("button",{type:"button",onClick:k12RotForce,disabled:k12RotSaving||k12RotLoading||!(k12RotStatus&&k12RotStatus.enabled),' +
-        'className:"h-8 rounded-lg border border-teal-500/30 px-3 text-xs text-teal-600 hover:bg-teal-500/10 dark:text-teal-400 disabled:opacity-50",children:"Force Rotation"}),' +
-        '(0,a.jsx)("button",{type:"button",onClick:k12RotSaveCfg,disabled:k12RotSaving||k12RotLoading,' +
-        'className:"h-8 rounded-lg bg-teal-600 px-4 text-xs font-medium text-white hover:bg-teal-700 disabled:opacity-50",' +
-        'children:k12RotSaving?"\u0110ang l\u01b0u...":"L\u01b0u Config"}),' +
-        '(0,a.jsx)("button",{type:"button",onClick:()=>setK12RotOpen(false),disabled:k12RotSaving,' +
-        'className:"h-8 rounded-lg border border-black/10 px-4 text-xs text-text-muted hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/10 disabled:opacity-50",children:"\u0110\u00f3ng"})' +
-        ']})' +
-        ']})}),'
-    ;
-
-    c = c.replace(gridAnchor, k12Modal + gridAnchor);
-
-    fs.writeFileSync(file, c, 'utf8');
-    console.log('  \u2705 Added K12 rotation dashboard UI');
+    console.log('[PATCH 25] K12 Rotation Dashboard (Retired)');
     return true;
 }
 
@@ -3298,9 +3058,17 @@ function patchUpdateManagerUI() {
     // 1. Inject Update Button into Quota Toolbar
     const updateBtn = ',(0,a.jsxs)("button",{type:"button",onClick:()=>window.__9rOpenUpdateModal&&window.__9rOpenUpdateModal(),className:"flex h-8 shrink-0 items-center gap-1 rounded-lg border border-emerald-500/30 px-2 text-xs text-emerald-600 transition-colors hover:bg-emerald-500/10 dark:text-emerald-400 cursor-pointer shadow-sm",title:"Quản lý & Cập nhật 9Router",children:[(0,a.jsx)("span",{className:"material-symbols-outlined text-[14px]",children:"system_update"}),(0,a.jsx)("span",{className:"hidden sm:inline",children:"⚡ Cập nhật"})]})';
     
-    const k12Anchor = 'children:"K12 Rotation"})]})';
-    if (c.includes(k12Anchor) && !c.includes('Quản lý & Cập nhật 9Router')) {
-        c = c.replace(k12Anchor, k12Anchor + updateBtn);
+    const planToggleAnchor = '(0,a.jsx)("span",{className:"hidden sm:inline",children:"T\\u1eaft/B\\u1eadt theo G\\u00f3i"})]})';
+    const planToggleAnchorRaw = '(0,a.jsx)("span",{className:"hidden sm:inline",children:"Tắt/Bật theo Gói"})]})';
+    const legacyK12Anchor = 'children:"K12 Rotation"})]})';
+
+    let targetAnchor = null;
+    if (c.includes(planToggleAnchor)) targetAnchor = planToggleAnchor;
+    else if (c.includes(planToggleAnchorRaw)) targetAnchor = planToggleAnchorRaw;
+    else if (c.includes(legacyK12Anchor)) targetAnchor = legacyK12Anchor;
+
+    if (targetAnchor && !c.includes('Quản lý & Cập nhật 9Router')) {
+        c = c.replace(targetAnchor, targetAnchor + updateBtn);
     }
 
     // 2. Inject Modal Client Script at the end of the chunk
