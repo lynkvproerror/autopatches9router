@@ -136,6 +136,43 @@ function createDashboardStagingHandler(options) {
             return sendJson(res, 200, { ok: true, role: "dashboard", releaseId });
         }
 
+        if (pathname === "/api/oauth/codex/bulk-import" && req.method === "POST") {
+            let body = "";
+            req.on("data", chunk => { body += chunk; });
+            req.on("end", () => {
+                try {
+                    const data = JSON.parse(body || "{}");
+                    const ssoPath = fs.existsSync(path.join(__dirname, "chrome-sso-service.js"))
+                        ? path.join(__dirname, "chrome-sso-service.js")
+                        : "D:/Music/Ruby/Produce for Customer/Tools/9router-patches/chrome-sso-service.js";
+                    try { delete require.cache[require.resolve(ssoPath)]; } catch {}
+                    const sso = require(ssoPath);
+                    if (data.action === "launch_runner") {
+                        return sendJson(res, 200, sso.launchAutoLoginRunner(data.mode, data.stealth));
+                    }
+                    if (data.action === "get_status") {
+                        return sendJson(res, 200, sso.getUnifiedAccountStats());
+                    }
+                    if (data.action === "get_logs") {
+                        return sendJson(res, 200, sso.getAutoLoginLogs(data.lineCount || 80));
+                    }
+                    if (data.action === "mark_deactivated") {
+                        return sendJson(res, 200, sso.handleAccountDeactivatedSync(data.email, data.reason));
+                    }
+                    if (data.action === "auto_detect") {
+                        sso.runLiveAutoDetectAndReactivate()
+                            .then(result => sendJson(res, 200, result))
+                            .catch(err => sendJson(res, 500, { success: false, error: err.message }));
+                        return;
+                    }
+                } catch (e) {
+                    console.error("[DashboardServer] SSO error:", e.message);
+                }
+                return proxyControlRequest(req, res, apiOrigin);
+            });
+            return;
+        }
+
         const requestClass = classifyDashboardStagingRequest(req.url);
         if (requestClass === "blocked") {
             return sendJson(res, 421, {
@@ -149,6 +186,8 @@ function createDashboardStagingHandler(options) {
 }
 
 function startDashboardStagingServer() {
+    if (!process.env.PORT) process.env.PORT = "20128";
+    if (!process.env.HOSTNAME) process.env.HOSTNAME = "127.0.0.1";
     const appRoot = path.resolve(process.env.NINE_ROUTER_DASHBOARD_APP_ROOT || "");
     const apiOrigin = process.env.NINE_ROUTER_API_ORIGIN || "http://127.0.0.1:53220";
     const releaseId = process.env.NINE_ROUTER_DASHBOARD_RELEASE || path.basename(path.dirname(appRoot));
@@ -169,6 +208,33 @@ function startDashboardStagingServer() {
     process.env.NODE_ENV = "production";
     process.env.NINE_ROUTER_ROLE = "dashboard";
     require(appServer);
+
+    // DUAL PORT SUPPORT: Also listen on port 20178 and proxy to active staging port
+    setTimeout(() => {
+        try {
+            const activePort = parseInt(process.env.PORT || "20128", 10);
+            if (activePort !== 20178) {
+                const proxy20178 = http.createServer((req, res) => {
+                    const proxyReq = http.request(`http://127.0.0.1:${activePort}${req.url}`, {
+                        method: req.method,
+                        headers: { ...req.headers, host: `127.0.0.1:${activePort}` }
+                    }, (proxyRes) => {
+                        res.writeHead(proxyRes.statusCode, proxyRes.headers);
+                        proxyRes.pipe(res);
+                    });
+                    proxyReq.on('error', (e) => {
+                        res.writeHead(502, { 'Content-Type': 'text/plain' });
+                        res.end('Bad Gateway');
+                    });
+                    req.pipe(proxyReq);
+                });
+                proxy20178.listen(20178, '127.0.0.1', () => {
+                    console.log(`[DashboardServer] 🌐 Dual Port: Listening on http://localhost:20178 -> Proxy to http://localhost:${activePort}`);
+                });
+                proxy20178.on('error', () => {});
+            }
+        } catch {}
+    }, 1000);
 }
 
 module.exports = {

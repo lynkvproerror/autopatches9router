@@ -78,7 +78,7 @@ test('recognizes an idempotently patched 0.5.50 AutoPing flow', () => {
 });
 
 test('recognizes legacy and modern provider-detail bulk patches', () => {
-    const common = 'bulkDelete401=()=>{}children:"Tắt 0% token"';
+    const common = 'bulkDelete401=()=>{}children:"Tắt 0% quota"';
     assert.equal(isProviderDetailBulkPatched(`${common}const session=qList.find(q=>q)`), true);
     assert.equal(isProviderDetailBulkPatched(`${common}session=list.find(q=>q)`), true);
     assert.equal(isProviderDetailBulkPatched(common), false);

@@ -41,8 +41,8 @@ $RequiredSourceFiles = @(
     "repair-9router.bat",
     "apply-patches.ps1",
     "apply-patches.js",
-    "model-account-routing.js",
-    "model-account-routing.test.js",
+    "default-account-routing.js",
+    "default-account-routing.test.js",
     "provider-detail-patch.js",
     "provider-detail-patch.test.js",
     "update-shim-cutover.test.js",
@@ -802,8 +802,8 @@ switch ($Action) {
     }
     "Start" {
         Write-StartupLauncher
-        Start-CentralMonitor
         Invoke-Controller -ControllerAction "EnsureRunning" | Out-Null
+        Start-CentralMonitor
         Test-RuntimeContract
         Write-Step "API, dashboard, and central monitor are running."
     }

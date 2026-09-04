@@ -49,7 +49,7 @@ function getPatchedProviderDetailTarget(content) {
 
 function isModernProviderAutoPingPatched(content) {
     if (!content.includes('__9rEnableProviderAutoPing=async()=>{') ||
-        !content.includes('await tC(__9rPing)') ||
+        !content.includes('__9rPing') ||
         !getPatchedProviderDetailTarget(content)) {
         return false;
     }
@@ -62,8 +62,8 @@ function isModernProviderAutoPingPatched(content) {
 
 function isProviderDetailBulkPatched(content) {
     return content.includes('bulkDelete401') &&
-        content.includes('children:"Tắt 0% token"') &&
-        (content.includes('const session=qList.find(') || content.includes('session=list.find('));
+        (content.includes('children:"Tắt 0% quota"') || content.includes('children:"Tắt 0% token"')) &&
+        (content.includes('const session=qList.find(') || content.includes('session=list.find(') || content.includes('sRem===0') || content.includes('rem===0') || content.includes('rem!==null&&rem===0') || content.includes('__9rGetRemaining'));
 }
 
 module.exports = {

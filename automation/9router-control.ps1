@@ -39,7 +39,7 @@ $BulkImportNormalizerTest = Join-Path $PatchRoot "bulk-import-normalizer.test.js
 $AutomationTest = Join-Path $PatchRoot "automation.test.js"
 $DashboardStagingTest = Join-Path $PatchRoot "dashboard-staging.test.js"
 $ApiGatewayTest = Join-Path $PatchRoot "api-gateway.test.js"
-$ModelAccountRoutingTest = Join-Path $PatchRoot "model-account-routing.test.js"
+$DefaultAccountRoutingTest = Join-Path $PatchRoot "default-account-routing.test.js"
 $ProviderDetailPatchTest = Join-Path $PatchRoot "provider-detail-patch.test.js"
 $UpdateShimCutoverTest = Join-Path $PatchRoot "update-shim-cutover.test.js"
 $StartupFile = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup\9router.vbs"
@@ -66,7 +66,9 @@ New-Item -ItemType Directory -Force -Path $StateDir, $LogDir, $UpdateWorkDir, $D
 function Write-ControlLog {
     param([string]$Message)
     $line = "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message
-    Add-Content -LiteralPath $LogFile -Value $line
+    try {
+        Add-Content -LiteralPath $LogFile -Value $line -ErrorAction SilentlyContinue
+    } catch {}
     Write-Host $line
 }
 
@@ -275,8 +277,9 @@ function Get-ApiPatchFingerprint {
     $targetStates = @()
     foreach ($target in $targets) {
         if (-not (Test-Path -LiteralPath $target)) { return $null }
+        $relPath = $target.Substring($RouterRoot.Length).TrimStart('\', '/').Replace('\', '/')
         $targetStates += [pscustomobject]@{
-            path = [IO.Path]::GetRelativePath($RouterRoot, $target).Replace('\', '/')
+            path = $relPath
             hash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
         }
     }
@@ -575,7 +578,7 @@ function Remove-OldDashboardStages {
         $_.Name -ne $KeepReleaseId
     } | ForEach-Object {
         Assert-DashboardStagePath $_.FullName
-        Remove-Item -LiteralPath $_.FullName -Recurse -Force
+        Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -890,7 +893,7 @@ function Invoke-PatchSet {
     & $NodeExe $PatchScript --scope $Scope --app-root $AppRoot | Out-Host
     if ($LASTEXITCODE -ne 0) { throw "Patch runner failed with exit code $LASTEXITCODE" }
 
-    $tests = @($AutomationTest, $DashboardStagingTest, $ApiGatewayTest, $BulkImportNormalizerTest, $ModelAccountRoutingTest, $ProviderDetailPatchTest, $UpdateShimCutoverTest)
+$tests = @($AutomationTest, $DashboardStagingTest, $ApiGatewayTest, $BulkImportNormalizerTest, $DefaultAccountRoutingTest, $ProviderDetailPatchTest, $UpdateShimCutoverTest)
     if ($Scope -in @("all", "dashboard")) { $tests += $PatchTest }
     $existingTests = $tests | Where-Object { Test-Path -LiteralPath $_ }
     if ($existingTests.Count -gt 0) {

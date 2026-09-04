@@ -26,11 +26,10 @@ Bộ công cụ tự động vá lỗi, tối ưu hóa hiệu năng, thêm tính
 - **Quota Performance & Hydration (Patch 20 & 14):** Tối ưu tải danh sách lớn (up to 500 accounts/page), chống giật lag và giảm thiểu lỗi Hydration.
 - **Smart Priority (Patch 21):** Tự động sắp xếp thứ tự ưu tiên các tài khoản theo hạn mức khả dụng.
 
-### 🧭 4. Cost-aware Codex Account Routing (Patch 28)
-- **Codex chọn model, 9router chọn tài khoản:** 9router không phân loại công việc; nó chỉ lọc tài khoản phù hợp với model mà Codex đã yêu cầu.
-- **Terra mặc định:** tác vụ mới thông thường dùng Terra và ưu tiên Free, Go, K12, Edu; nếu các gói này không khả dụng thì Terra có thể dùng Plus+.
-- **Sol ngoại lệ:** Sol chỉ dùng Plus+ và fail closed khi không có tài khoản phù hợp, nên không tiêu quota Free/Go/K12/Edu.
-- **Policy không nằm trong 9router:** Patch 28 chỉ định tuyến tài khoản (Sol -> Plus+, Terra -> ưu tiên Free/Go/K12/Edu); Codex instruction và role mới quyết định model/loại công việc.
+### 🧭 4. Default Account Routing (Patch 28)
+- **Đã retire phân tuyến theo model/gói:** Patch 28 không còn phân loại Sol/Terra, lọc tài khoản, hoặc inject logic chọn tài khoản.
+- **Khôi phục upstream:** 9router giữ nguyên toàn bộ tài khoản active đủ điều kiện và sử dụng chiến lược chọn credential mặc định của upstream.
+- **Migration an toàn:** khi gặp marker tier-routing v1/v2/v3 từ bản cũ, Patch 28 chỉ xóa assignment đã inject; nếu không có marker thì thành công mà không sửa chunk.
 
 ### 🧠 5. Codex Delegation and Rollout Audit
 - **Terra là primary:** Terra xử lý tác vụ thông thường, phân tích thường quy và verification thường quy.

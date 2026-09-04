@@ -1,4 +1,9 @@
-# Model-to-Account Tier Routing Design
+# [Retired] Model-to-Account Tier Routing Design
+
+> **Status: retired on 2026-08-14.** Default upstream account selection is
+> restored. Patch 28 performs cleanup of recognized v1/v2/v3 injected
+> assignments only; it does not classify requested models, filter accounts, or
+> inject account-routing logic. The remaining design records the retired feature.
 
 ## Objective
 

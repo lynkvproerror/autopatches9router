@@ -1,4 +1,10 @@
-# Model-to-Account Tier Routing Implementation Plan
+# [Retired] Model-to-Account Tier Routing Implementation Plan
+
+> **Status: retired on 2026-08-14.** Patch 28 now restores the default upstream
+> credential selector. It removes recognized v1/v2/v3 injected tier-filter
+> assignments and never classifies models, filters accounts, or injects routing
+> behavior. The remaining document is retained only as historical implementation
+> context.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

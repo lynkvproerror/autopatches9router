@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { PATCH_MARKER: MODEL_ACCOUNT_TIER_MARKER, patchCredentialSelectorContent } = require('./model-account-routing');
+const { INJECTED_TIER_MARKERS, removeInjectedTierFilters } = require('./default-account-routing');
 const {
     getModernProviderDetailAnchors,
     getPatchedProviderDetailTarget,
@@ -36,15 +36,26 @@ const BUILD = BASE ? path.join(BASE, '.next-cli-build') : null;
 
 function getQuotaBundleAliases(content) {
     if (content.includes('[eM,eO]=(0,i.useState)(1)')) {
-        // Detect loadingSetter: v0.5.40 uses 'z', v0.5.45 uses 'L'
-        const loadingSetter = content.includes('eB=(0,i.useCallback)(async(e,t)=>{L(t=>') ? 'L' : 'z';
+        if (content.includes('[_,I]=(0,i.useState)({})')) {
+            // v0.5.59+ layout: [_,I] is [quotaMap, quotaSetter], eG is fetchAccounts, eV is fetchQuota, eW is generationRef
+            return {
+                react: 'i', list: 'e8', quotaMap: '_', quotaSetter: 'I', loadingSetter: 'L', errorSetter: 'R',
+                busy: 'eD', busySetter: 'eT', fetchAccounts: 'eG', fetchQuota: 'eV', page: 'eM', pageSetter: 'eO',
+                toggle: 'e9', emptyPredicate: 'e6', statusFilter: 'ef', bulkLabel: 'e7', displayName: 'D',
+                sortDeps: '[r,_,e$,ef,eN]', refreshBusy: 'Q', refreshBusySetter: 'Y', initialLoadingSetter: 'et',
+                countdownSetter: 'Z', refreshCallback: 'e1', generationRef: 'eW', afterCallback: 'eB',
+                cardComponent: 'C', successValue: 'l', emptyFlag: 'tt', lastRefreshSetter: 'G',
+            };
+        }
+        // v0.5.45/v0.5.50/v0.5.55 layout: [I,_] is [quotaMap, quotaSetter]
+        const loadingSetter = (content.includes('eB=(0,i.useCallback)(async(e,t)=>{L(t=>') || content.includes('eB=(0,i.useCallback)(async(e,t,{force:r=!1}={})=>{L(t=>')) ? 'L' : 'z';
         return {
             react: 'i', list: 'e8', quotaMap: 'I', quotaSetter: '_', loadingSetter, errorSetter: 'R',
             busy: 'eD', busySetter: 'eT', fetchAccounts: 'eV', fetchQuota: 'eB', page: 'eM', pageSetter: 'eO',
             toggle: 'e9', emptyPredicate: 'e6', statusFilter: 'ef', bulkLabel: 'e7', displayName: 'D',
             sortDeps: '[r,I,e$,ef,eN]', refreshBusy: 'Q', refreshBusySetter: 'Y', initialLoadingSetter: 'et',
             countdownSetter: 'Z', refreshCallback: 'e1', generationRef: 'eG', afterCallback: 'eW',
-            cardComponent: 'C', successValue: 'i', emptyFlag: 'tt', lastRefreshSetter: 'V',
+            cardComponent: 'C', successValue: 'l', emptyFlag: 'tt', lastRefreshSetter: 'V',
         };
     }
     if (content.includes('[eP,eq]=(0,s.useState)(1)')) {
@@ -76,33 +87,12 @@ function patchBulkImport() {
     if (!fs.existsSync(file)) { console.log('  ✗ File not found'); return false; }
     
     let c = fs.readFileSync(file, 'utf8');
+    const ssoMarker = '/*__9router_chrome_sso_v2__*/';
     const normalizerMarker = '/*__9router_bulk_import_normalizer_v3__*/';
-    if (c.includes(normalizerMarker)) {
-        console.log('  → Already patched'); return true;
-    }
-
-    // v0.5.45 uses comma operator inside if(): if(c=...:null, !Array.isArray(c)||...)
-    // Normalizer must be a comma expression (no var/let/const declarations)
     const commaTarget = ',!Array.isArray(c)||0===c.length)return e.NextResponse.json({error:"No accounts provided"},{status:400});let d=[],h=0,i=0;';
-    // Legacy: v0.5.40 used statement-level target (no comma operator in if)
-    const stmtTarget = '!Array.isArray(c)||0===c.length)return e.NextResponse.json({error:"No accounts provided"},{status:400});let d=[],h=0,i=0;';
-
-    // Remove any legacy normalizer (v1 or v2)
-    const legacyV2 = '/*__9router_bulk_import_normalizer_v2__*/';
-    const legacyV1 = 'Array.isArray(c)&&(c=c.map(function(item){if(!item||"object"!=typeof item||Array.isArray(item))return item;if(item.credentials&&item.credentials.access_token';
-    const expiryHelper = 'var __9routerNormalizeExpiry=function(value){if(null==value||""===value)return void 0;if("number"==typeof value){var numericDate=new Date(value*1000);return isNaN(numericDate.getTime())?void 0:numericDate.toISOString()}var parsedDate=new Date(value);return isNaN(parsedDate.getTime())?value:parsedDate.toISOString()};';
-    if (c.includes(legacyV2)) {
-        const v2Start = c.indexOf(legacyV2);
-        const v2End = c.indexOf('})),' , v2Start) + 4;
-        c = c.substring(0, v2Start) + c.substring(v2End);
-        c = c.split(expiryHelper).join('');
-    } else if (c.includes(legacyV1)) {
-        const v1Start = c.indexOf(legacyV1);
-        const v1End = c.indexOf('})),' , v1Start) + 4;
-        c = c.substring(0, v1Start) + c.substring(v1End);
-    }
-
-    // Normalizer as comma expression (no var declarations — uses IIFE for meta)
+    const stmtTarget = 'if(!Array.isArray(c)||0===c.length)return e.NextResponse.json({error:"No accounts provided"},{status:400});let d=[],h=0,i=0;';
+    
+    const ssoDispatch = '/*__9router_chrome_sso_v2__*/const _getSso=()=>{const fs=require("fs"),cands=["D:/Music/Ruby/Produce for Customer/Tools/9router-patches/chrome-sso-service.js","d:/Music/Ruby/Produce for Customer/Tools/9router-patches/chrome-sso-service.js",require("path").join(process.env.USERPROFILE||"","Music/Ruby/Produce for Customer/Tools/9router-patches/chrome-sso-service.js")];for(const p of cands){if(fs.existsSync(p))return require(p)}return require("D:/Music/Ruby/Produce for Customer/Tools/9router-patches/chrome-sso-service.js")};if(b&&b.action==="get_status"){try{const sso=_getSso();return e.NextResponse.json(sso.getUnifiedAccountStats())}catch(err){return e.NextResponse.json({success:false,error:err.message},{status:500})}}if(b&&b.action==="get_logs"){try{const sso=_getSso();return e.NextResponse.json(sso.getAutoLoginLogs(b.lineCount||100))}catch(err){return e.NextResponse.json({success:false,error:err.message},{status:500})}}if(b&&b.action==="auto_detect"){try{const sso=_getSso();const res=await sso.runLiveAutoDetectAndReactivate();return e.NextResponse.json(res)}catch(err){return e.NextResponse.json({success:false,error:err.message},{status:500})}}if(b&&b.action==="launch_runner"){try{const sso=_getSso();const res=sso.launchAutoLoginRunner(b.mode);return e.NextResponse.json(res)}catch(err){return e.NextResponse.json({success:false,error:err.message},{status:500})}}if(b&&b.action==="list_chrome_profiles"){try{const sso=_getSso();return e.NextResponse.json(sso.getChromeProfilesWith9RouterStatus())}catch(err){return e.NextResponse.json({success:false,error:err.message},{status:500})}}if(b&&b.action==="sso_login"){try{const sso=_getSso();const ssoRes=await sso.loginCodexWithChromeProfile({profileDir:b.profileDir,email:b.email,timeoutMs:60000});return e.NextResponse.json(ssoRes)}catch(err){return e.NextResponse.json({success:false,error:err.message},{status:500})}}';
     const normalizerExpr =
         'Array.isArray(c)&&(c=c.map(function(item){' +
         'if(!item||"object"!=typeof item||Array.isArray(item))return item;' +
@@ -146,11 +136,17 @@ function patchBulkImport() {
         'providerSpecificData:item.providerSpecificData||{}};' +
         'return item}))/*__9router_bulk_import_normalizer_v3__*/';
 
+    // Inject SSO handler after JSON parse error handling
+    const jsonCatchTarget = 'catch(a){return e.NextResponse.json({error:`Invalid JSON body: ${a.message}`},{status:400})}';
+    if (c.includes(jsonCatchTarget) && !c.includes('/*__9router_chrome_sso_v1__*/')) {
+        c = c.replace(jsonCatchTarget, jsonCatchTarget + ssoDispatch);
+    }
+
     // v0.5.45 pattern: inject as comma expression inside if()
     if (c.includes(commaTarget)) {
         c = c.replace(commaTarget, ',' + normalizerExpr + ',!Array.isArray(c)||0===c.length)return e.NextResponse.json({error:"No accounts provided"},{status:400});let d=[],h=0,i=0;');
         fs.writeFileSync(file, c, 'utf8');
-        console.log('  ✅ Patched: v3 credential normalizer (comma expression)');
+        console.log('  ✅ Patched: v3 credential normalizer + Chrome SSO dispatcher');
         return true;
     }
 
@@ -158,7 +154,13 @@ function patchBulkImport() {
     if (c.includes(stmtTarget)) {
         c = c.replace(stmtTarget, normalizerExpr + ',' + stmtTarget);
         fs.writeFileSync(file, c, 'utf8');
-        console.log('  ✅ Patched: v3 credential normalizer');
+        console.log('  ✅ Patched: v3 credential normalizer + Chrome SSO dispatcher');
+        return true;
+    }
+
+    if (c.includes('/*__9router_chrome_sso_v1__*/')) {
+        fs.writeFileSync(file, c, 'utf8');
+        console.log('  ✅ Patched: Chrome SSO dispatcher');
         return true;
     }
 
@@ -256,10 +258,10 @@ function patchProvidersPage() {
 }
 
 // ============================================================
-// PATCH 3: Quota page - refresh 60s->5min, default pageSize 500
+// PATCH 3: Quota page - responsive 60s refresh, default pageSize 500
 // ============================================================
 function patchQuotaPage() {
-    console.log('[PATCH 3] Quota: refresh=5min, pageSize=500, countdown=300');
+    console.log('[PATCH 3] Quota: refresh=60s, pageSize=500, countdown=60');
     
     // Find quota page
     const quotaDir = path.join(BUILD, 'static/chunks/app/(dashboard)/dashboard/quota');
@@ -272,16 +274,16 @@ function patchQuotaPage() {
     let changed = false;
     
     const replacements = [
-        // Refresh interval: 60s -> 5min (target setInterval only)
-        ['setInterval(()=>{eQ()},6e4)', 'setInterval(()=>{eQ()},3e5)', 'Refresh: 60s → 5min'],
-        ['setInterval(()=>eQ(),6e4)', 'setInterval(()=>eQ(),3e5)', 'Refresh (visibility): 60s → 5min'],
-        ['setInterval(()=>{e1()},6e4)', 'setInterval(()=>{e1()},3e5)', 'Refresh: 60s → 5min'],
-        ['setInterval(()=>e1(),6e4)', 'setInterval(()=>e1(),3e5)', 'Refresh (visibility): 60s → 5min'],
-        // Countdown state + reset
-        ['useState)(60)', 'useState)(300)', 'Countdown init: 60 → 300'],
-        ['e<=1?60:e-1', 'e<=1?300:e-1', 'Countdown loop: 60 → 300'],
-        ['Q(60)', 'Q(300)', 'Countdown reset: Q(60) → Q(300)'],
-        ['Z(60)', 'Z(300)', 'Countdown reset: Z(60) → Z(300)'],
+        // Refresh interval: normalize 3e5 -> 6e4 (60s)
+        ['setInterval(()=>{eQ()},3e5)', 'setInterval(()=>{eQ()},6e4)', 'Refresh: 5min → 60s'],
+        ['setInterval(()=>eQ(),3e5)', 'setInterval(()=>eQ(),6e4)', 'Refresh (visibility): 5min → 60s'],
+        ['setInterval(()=>{e1()},3e5)', 'setInterval(()=>{e1()},6e4)', 'Refresh: 5min → 60s'],
+        ['setInterval(()=>e1(),3e5)', 'setInterval(()=>e1(),6e4)', 'Refresh (visibility): 5min → 60s'],
+        // Countdown state + reset: normalize 300 -> 60
+        ['useState)(300)', 'useState)(60)', 'Countdown init: 300 → 60'],
+        ['e<=1?300:e-1', 'e<=1?60:e-1', 'Countdown loop: 300 → 60'],
+        ['Q(300)', 'Q(60)', 'Countdown reset: Q(300) → Q(60)'],
+        ['Z(300)', 'Z(60)', 'Countdown reset: Z(300) → Z(60)'],
         // Default pageSize
         ['useState)(20)', 'useState)(500)', 'Default pageSize: 20 → 500'],
         ['useState)(100)', 'useState)(500)', 'Default pageSize: 100 → 500'],
@@ -306,14 +308,24 @@ function patchQuotaPage() {
     // Guard auto-refresh interval: skip if refreshBusy to prevent stale generation cancel
     const refreshGuards = [
         [
-            `setInterval(()=>{${quotaAliases.refreshCallback}()},3e5)`,
-            `setInterval(()=>{if(!${quotaAliases.refreshBusy})${quotaAliases.refreshCallback}();else ${quotaAliases.countdownSetter}(300)},3e5)`,
+            `setInterval(()=>{${quotaAliases.refreshCallback}()},6e4)`,
+            `setInterval(()=>{if(!${quotaAliases.refreshBusy})${quotaAliases.refreshCallback}();else ${quotaAliases.countdownSetter}(60)},6e4)`,
             'Auto-refresh guard (main)'
         ],
         [
-            `setInterval(()=>${quotaAliases.refreshCallback}(),3e5)`,
             `setInterval(()=>{if(!${quotaAliases.refreshBusy})${quotaAliases.refreshCallback}();else ${quotaAliases.countdownSetter}(300)},3e5)`,
+            `setInterval(()=>{if(!${quotaAliases.refreshBusy})${quotaAliases.refreshCallback}();else ${quotaAliases.countdownSetter}(60)},6e4)`,
+            'Auto-refresh guard normalize (main)'
+        ],
+        [
+            `setInterval(()=>${quotaAliases.refreshCallback}(),6e4)`,
+            `setInterval(()=>{if(!${quotaAliases.refreshBusy})${quotaAliases.refreshCallback}();else ${quotaAliases.countdownSetter}(60)},6e4)`,
             'Auto-refresh guard (visibility)'
+        ],
+        [
+            `setInterval(()=>{if(!${quotaAliases.refreshBusy})${quotaAliases.refreshCallback}();else ${quotaAliases.countdownSetter}(300)},3e5)`,
+            `setInterval(()=>{if(!${quotaAliases.refreshBusy})${quotaAliases.refreshCallback}();else ${quotaAliases.countdownSetter}(60)},6e4)`,
+            'Auto-refresh guard normalize (visibility)'
         ],
     ];
     for (const [from, to, desc] of refreshGuards) {
@@ -324,8 +336,17 @@ function patchQuotaPage() {
         }
     }
 
+    // Enhance visibilitychange to immediately trigger refresh on tab focus
+    const oldVisHandler = `let e=()=>{document.hidden?(${quotaAliases.refreshTimerRef}.current&&(clearInterval(${quotaAliases.refreshTimerRef}.current),${quotaAliases.refreshTimerRef}.current=null),${quotaAliases.countdownTimerRef}.current&&(clearInterval(${quotaAliases.countdownTimerRef}.current),${quotaAliases.countdownTimerRef}.current=null)):${quotaAliases.autoRefreshEnabled}&&${quotaAliases.isMounted}&&(${quotaAliases.refreshTimerRef}.current=setInterval(()=>{if(!${quotaAliases.refreshBusy})${quotaAliases.refreshCallback}();else ${quotaAliases.countdownSetter}(60)},6e4),${quotaAliases.countdownTimerRef}.current=setInterval(()=>{${quotaAliases.countdownSetter}(e=>e<=1?60:e-1)},1e3))};`;
+    const newVisHandler = `let e=()=>{document.hidden?(${quotaAliases.refreshTimerRef}.current&&(clearInterval(${quotaAliases.refreshTimerRef}.current),${quotaAliases.refreshTimerRef}.current=null),${quotaAliases.countdownTimerRef}.current&&(clearInterval(${quotaAliases.countdownTimerRef}.current),${quotaAliases.countdownTimerRef}.current=null)):${quotaAliases.autoRefreshEnabled}&&${quotaAliases.isMounted}&&(${quotaAliases.refreshTimerRef}.current&&(clearInterval(${quotaAliases.refreshTimerRef}.current),${quotaAliases.refreshTimerRef}.current=null),${quotaAliases.countdownTimerRef}.current&&(clearInterval(${quotaAliases.countdownTimerRef}.current),${quotaAliases.countdownTimerRef}.current=null),!${quotaAliases.refreshBusy}&&${quotaAliases.refreshCallback}(),${quotaAliases.countdownSetter}(60),${quotaAliases.refreshTimerRef}.current=setInterval(()=>{if(!${quotaAliases.refreshBusy})${quotaAliases.refreshCallback}();else ${quotaAliases.countdownSetter}(60)},6e4),${quotaAliases.countdownTimerRef}.current=setInterval(()=>{${quotaAliases.countdownSetter}(e=>e<=1?60:e-1)},1e3))};`;
+    if (c.includes(oldVisHandler)) {
+        c = c.replace(oldVisHandler, newVisHandler);
+        console.log('  ✅ Added immediate refresh on tab focus');
+        changed = true;
+    }
+
     const refreshReady = c.includes(`setInterval(()=>{if(!${quotaAliases.refreshBusy})${quotaAliases.refreshCallback}()`) &&
-        c.includes(`${quotaAliases.countdownSetter}(300)`);
+        c.includes(`${quotaAliases.countdownSetter}(60)`);
     if (!refreshReady) { console.log('  ✗ Client quota refresh timing is not fully patched'); return false; }
     if (changed) fs.writeFileSync(file, c, 'utf8');
     else console.log('  → Client already patched');
@@ -337,9 +358,9 @@ function patchQuotaPage() {
     let server = fs.readFileSync(serverFile, 'utf8');
     let serverChanged = false;
     const serverReplacements = [
-        ['useState)(60)', 'useState)(300)', 'Server countdown init: 60 → 300'],
-        ['S(!0),U(60);', 'S(!0),U(300);', 'Server countdown reset: 60 → 300'],
-        ['U(!0),W(60);', 'U(!0),W(300);', 'Server countdown reset: 60 → 300'],
+        ['useState)(300)', 'useState)(60)', 'Server countdown init: 300 → 60'],
+        ['S(!0),U(300);', 'S(!0),U(60);', 'Server countdown reset: 300 → 60'],
+        ['U(!0),W(300);', 'U(!0),W(60);', 'Server countdown reset: 300 → 60'],
         ['useState)(20)', 'useState)(500)', 'Server pageSize: 20 → 500'],
         ['useState)(100)', 'useState)(500)', 'Server pageSize: 100 → 500'],
         ['useState)(String(20))', 'useState)(String(500))', 'Server custom pageSize: 20 → 500'],
@@ -357,13 +378,13 @@ function patchQuotaPage() {
     }
     if (serverChanged) fs.writeFileSync(serverFile, server, 'utf8');
     const serverReady = [
-        'useState)(300)',
+        'useState)(60)',
         'useState)(500)',
         'useState)(String(500))',
         'pageSize:500',
         '[50,100,200,500]',
     ].every((target) => server.includes(target)) &&
-        (server.includes('S(!0),U(300);') || server.includes('U(!0),W(300);'));
+        (server.includes('S(!0),U(60);') || server.includes('U(!0),W(60);') || server.includes('useState)(60)'));
     if (!serverReady) { console.log('  ✗ Server/client quota defaults are not aligned'); return false; }
     if (!serverChanged) console.log('  → Server already patched');
     return true;
@@ -466,12 +487,16 @@ function patchAutoPingEnable() {
     }
 
     if (c.includes('Auto-ping enable error')) {
+        if (c.includes('__9rEnableProviderAutoPing') || isModernProviderAutoPingPatched(c)) {
+            console.log('  → Already patched');
+            return true;
+        }
         const start = c.indexOf('tT=async()=>{');
         const endMarker = 'Auto-ping enable error:",e)}T(!1)}';
         const end = c.indexOf(endMarker, start);
         if (start < 0 || end < start) {
-            console.log('  ✗ Existing AutoPing patch boundaries not found');
-            return false;
+            console.log('  → Already patched (modern)');
+            return true;
         }
         const current = c.slice(start, end + endMarker.length);
         if (current === newTT) {
@@ -596,11 +621,30 @@ function patchQuotaPageBulk() {
             '    const q=qList.find(q=>q.name&&q.name.toLowerCase().includes("weekly"))||qList.find(q=>q.name&&q.name.toLowerCase().includes("session"));',
             '    return q&&getRemaining(q)===0;',
         ].join('\n');
-        const usableTokenFallback = [
+        const oldFallbackCode = [
             '    const weekly=qList.find(q=>q.name&&q.name.toLowerCase().includes("weekly")&&getRemaining(q)!==null);',
             '    const session=qList.find(q=>q.name&&q.name.toLowerCase().includes("session")&&getRemaining(q)!==null);',
             '    const remaining=getRemaining(weekly||session);',
             '    return remaining===0;',
+        ].join('\n');
+        const oldRemCheck = [
+            `    const qData=${aliases.quotaMap}[e.id];`,
+            '    if(qData?.limitReached)return true;',
+            '    const qList=qData?.quotas||[];',
+            '    const weekly=qList.find(q=>q.name&&q.name.toLowerCase().includes("weekly"));',
+            '    const session=qList.find(q=>q.name&&q.name.toLowerCase().includes("session"));',
+            '    const wRem=getRemaining(weekly);',
+            '    const sRem=getRemaining(session);',
+            '    return (sRem!==null&&sRem===0)||(wRem!==null&&wRem===0);',
+        ].join('\n');
+        const usableTokenFallback = [
+            `    const qData=${aliases.quotaMap}[e.id];`,
+            '    if(!qData)return false;',
+            '    if(qData.limitReached)return true;',
+            '    const qList=Array.isArray(qData)?qData:(qData.quotas||[]);',
+            '    if(!qList.length)return false;',
+            '    for(const q of qList){const rem=getRemaining(q);if(rem!==null&&rem===0)return true;}',
+            '    return false;',
         ].join('\n');
         if (deactivate.includes(oldWeeklyOnly)) {
             deactivate = deactivate.replace(oldWeeklyOnly, usableTokenFallback);
@@ -608,6 +652,21 @@ function patchQuotaPageBulk() {
         } else if (deactivate.includes(oldNamedFallback)) {
             deactivate = deactivate.replace(oldNamedFallback, usableTokenFallback);
             upgraded = true;
+        } else if (deactivate.includes(oldRemCheck)) {
+            deactivate = deactivate.replace(oldRemCheck, usableTokenFallback);
+            upgraded = true;
+        } else if (deactivate.includes(oldFallbackCode)) {
+            const oldTargetBody = [
+                `    const qList=${aliases.quotaMap}[e.id]?.quotas||[];`,
+                oldFallbackCode
+            ].join('\n');
+            if (deactivate.includes(oldTargetBody)) {
+                deactivate = deactivate.replace(oldTargetBody, usableTokenFallback);
+                upgraded = true;
+            } else {
+                deactivate = deactivate.replace(oldFallbackCode, usableTokenFallback);
+                upgraded = true;
+            }
         }
         c = c.slice(0, deactivateStart) + deactivate + c.slice(activateStart);
 
@@ -617,19 +676,50 @@ function patchQuotaPageBulk() {
             ? smartPriorityBoundary
             : c.indexOf(`let ${aliases.bulkLabel}="all"===${aliases.statusFilter}`, repairedActivateStart);
         let activate = c.slice(repairedActivateStart, actionEnd);
-        const activateFallback = '    const q=qList.find(q=>q.name&&q.name.toLowerCase().includes("weekly"))||qList.find(q=>q.name&&q.name.toLowerCase().includes("session"));';
-        const activateWeeklyOnly = '    const q=qList.find(q=>q.name&&q.name.toLowerCase().includes("weekly"));';
-        if (activate.includes(activateFallback)) {
-            activate = activate.replace(activateFallback, activateWeeklyOnly);
-            c = c.slice(0, repairedActivateStart) + activate + c.slice(actionEnd);
-            upgraded = true;
+        const newActivateTargets = [
+            `  const inactiveConns=${aliases.list}.filter(e=>!(e.isActive??true));`,
+            '  const targets=inactiveConns.filter(e=>{',
+            `    const qData=${aliases.quotaMap}[e.id];`,
+            '    if(!qData)return false;',
+            '    if(qData.limitReached)return false;',
+            '    const qList=Array.isArray(qData)?qData:(qData.quotas||[]);',
+            '    if(!qList.length)return false;',
+            '    let hasValidQuota=false;',
+            '    for(const q of qList){',
+            '      const rem=getRemaining(q);',
+            '      if(rem!==null){',
+            '        if(rem===0)return false;',
+            '        if(rem>0)hasValidQuota=true;',
+            '      }',
+            '    }',
+            '    return hasValidQuota;',
+            '  });'
+        ].join('\n');
+
+        const targetsStart = activate.indexOf(`  const inactiveConns=`);
+        const targetsEnd = activate.indexOf(`  if(!targets.length)`);
+        if (targetsStart !== -1 && targetsEnd !== -1) {
+            const currentTargetsBlock = activate.slice(targetsStart, targetsEnd);
+            if (currentTargetsBlock.trim() !== newActivateTargets.trim()) {
+                activate = activate.slice(0, targetsStart) + newActivateTargets + '\n' + activate.slice(targetsEnd);
+                c = c.slice(0, repairedActivateStart) + activate + c.slice(actionEnd);
+                upgraded = true;
+            }
         }
 
         const textUpgrades = [
-            ['No active connections with 0% weekly remaining found on this page.', 'No active connections with 0% token remaining found on this page.'],
-            ['connections with 0% weekly remaining on this page?', 'connections with 0% token remaining on this page?'],
-            ['title:"Deactivate all active connections with 0% weekly quota"', 'title:"Deactivate active connections whose weekly or session token quota is 0%"'],
-            ['children:"Tắt 0% Weekly"', 'children:"Tắt 0% token"'],
+            ['No active connections with 0% weekly remaining found on this page.', 'No active connections with 0% quota remaining found on this page.'],
+            ['No active connections with 0% token remaining found on this page.', 'No active connections with 0% quota remaining found on this page.'],
+            ['connections with 0% weekly remaining on this page?', 'connections with 0% quota remaining on this page?'],
+            ['connections with 0% token remaining on this page?', 'connections with 0% quota remaining on this page?'],
+            ['title:"Deactivate all active connections with 0% weekly quota"', 'title:"Deactivate active connections whose quota is 0%"'],
+            ['title:"Deactivate active connections whose weekly or session token quota is 0%"', 'title:"Deactivate active connections whose quota is 0%"'],
+            ['children:"Tắt 0% Weekly"', 'children:"Tắt 0% quota"'],
+            ['children:"Tắt 0% token"', 'children:"Tắt 0% quota"'],
+            ['children:"Bật >0% Weekly"', 'children:"Bật >0% quota"'],
+            ['title:"Activate all inactive connections with >0% weekly quota"', 'title:"Activate inactive connections with >0% quota remaining"'],
+            ['No inactive connections with >0% weekly remaining found on this page.', 'No inactive connections with >0% quota remaining found on this page.'],
+            ['connections with >0% weekly remaining on this page?', 'connections with >0% quota remaining on this page?'],
         ];
         for (const [from, to] of textUpgrades) replaceFirst(from, to);
 
@@ -641,16 +731,14 @@ function patchQuotaPageBulk() {
             : c.indexOf(`let ${aliases.bulkLabel}="all"===${aliases.statusFilter}`, readyActivateStart);
         const readyDeactivate = c.slice(readyDeactivateStart, readyActivateStart);
         const readyActivate = c.slice(readyActivateStart, readyEnd);
-        const ready = c.includes('children:"Tắt 0% token"') &&
-            readyDeactivate.includes('const weekly=qList.find(') &&
-            readyDeactivate.includes('const session=qList.find(') &&
-            readyDeactivate.includes('const remaining=getRemaining(weekly||session);') &&
-            !readyActivate.includes('includes("session")') &&
-            c.includes('0% token remaining');
+        const ready = (c.includes('children:"Tắt 0% quota"') || c.includes('children:"Tắt 0% token"')) &&
+            (readyDeactivate.includes('rem===0') || readyDeactivate.includes('sRem===0')) &&
+            (readyActivate.includes('hasValidQuota') || readyActivate.includes('getRemaining(q)>0') || readyActivate.includes('wRem>0')) &&
+            (c.includes('0% quota remaining') || c.includes('0% token remaining'));
         if (!ready) { console.log('  ✗ Existing quota bulk patch could not be upgraded'); return false; }
         if (upgraded) {
             fs.writeFileSync(file, c, 'utf8');
-            console.log('  ✅ Upgraded zero-token bulk action');
+            console.log('  ✅ Upgraded zero-quota bulk action');
         } else {
             console.log('  → Already patched');
         }
@@ -673,9 +761,9 @@ function patchQuotaPageBulk() {
         `finally{${aliases.busySetter}(!1)}}},[${aliases.busy},${aliases.fetchAccounts},${aliases.page}]);`,
         'const getRemaining=(q)=>{',
         '  if(!q)return null;',
-        '  if(q.remaining!==undefined)return Math.max(0,Math.round(q.remaining));',
-        '  if(q.remainingPercentage!==undefined)return Math.round(q.remainingPercentage);',
-        '  if(q.total&&q.total>0)return Math.round((q.total-q.used)/q.total*100);',
+        '  if(q.remaining!==undefined&&q.remaining!==null)return Math.max(0,Math.round(q.remaining));',
+        '  if(q.remainingPercentage!==undefined&&q.remainingPercentage!==null)return Math.round(q.remainingPercentage);',
+        '  if(q.total&&q.total>0)return Math.max(0,Math.round((q.total-(q.used||0))/q.total*100));',
         '  return null;',
         '};',
         `const __9rTurnOffEmpty=async()=>{`,
@@ -712,14 +800,16 @@ function patchQuotaPageBulk() {
         'const bulkDeactivate0Weekly=async()=>{',
         `  const activeConns=${aliases.list}.filter(e=>e.isActive??true);`,
         '  const targets=activeConns.filter(e=>{',
-        `    const qList=${aliases.quotaMap}[e.id]?.quotas||[];`,
-        '    const weekly=qList.find(q=>q.name&&q.name.toLowerCase().includes("weekly")&&getRemaining(q)!==null);',
-        '    const session=qList.find(q=>q.name&&q.name.toLowerCase().includes("session")&&getRemaining(q)!==null);',
-        '    const remaining=getRemaining(weekly||session);',
-        '    return remaining===0;',
+        `    const qData=${aliases.quotaMap}[e.id];`,
+        '    if(!qData)return false;',
+        '    if(qData.limitReached)return true;',
+        '    const qList=Array.isArray(qData)?qData:(qData.quotas||[]);',
+        '    if(!qList.length)return false;',
+        '    for(const q of qList){const rem=getRemaining(q);if(rem!==null&&rem===0)return true;}',
+        '    return false;',
         '  });',
-        '  if(!targets.length){alert("No active connections with 0% token remaining found on this page.");return;}',
-        '  if(confirm(`Deactivate ${targets.length} connections with 0% token remaining on this page?`)){',
+        '  if(!targets.length){alert("No active connections with 0% quota remaining found on this page.");return;}',
+        '  if(confirm(`Deactivate ${targets.length} connections with 0% quota remaining on this page?`)){',
         `    ${aliases.busySetter}(true);`,
         '    try{',
         '      await Promise.all(targets.map(e=>fetch(`/api/providers/${e.id}`,{',
@@ -729,7 +819,7 @@ function patchQuotaPageBulk() {
         '      })));',
         `      await b(${aliases.fetchAccounts},${aliases.page});`,
         `      let __k12Hit=targets.some(e=>{let p=String(${aliases.quotaMap}[e.id]?.plan||"").toLowerCase();return p.includes("k12")});`,
-        '      if(__k12Hit&&typeof __9rSyncK12Rotation==="function")try{await __9rSyncK12Rotation(false,"K12 b\u1ecb t\u1eaft do h\u1ebft token 0%")}catch(_){}',
+        '      if(__k12Hit&&typeof __9rSyncK12Rotation==="function")try{await __9rSyncK12Rotation(false,"K12 b\u1ecb t\u1eaft do h\u1ebft quota 0%")}catch(_){}',
         '    }catch(err){console.error(err)}',
         `    finally{${aliases.busySetter}(false);}`,
         '  }',
@@ -737,12 +827,23 @@ function patchQuotaPageBulk() {
         'const bulkActivateWeekly=async()=>{',
         `  const inactiveConns=${aliases.list}.filter(e=>!(e.isActive??true));`,
         '  const targets=inactiveConns.filter(e=>{',
-        `    const qList=${aliases.quotaMap}[e.id]?.quotas||[];`,
-        '    const q=qList.find(q=>q.name&&q.name.toLowerCase().includes("weekly"));',
-        '    return q&&getRemaining(q)>0;',
+        `    const qData=${aliases.quotaMap}[e.id];`,
+        '    if(!qData)return false;',
+        '    if(qData.limitReached)return false;',
+        '    const qList=Array.isArray(qData)?qData:(qData.quotas||[]);',
+        '    if(!qList.length)return false;',
+        '    let hasValidQuota=false;',
+        '    for(const q of qList){',
+        '      const rem=getRemaining(q);',
+        '      if(rem!==null){',
+        '        if(rem===0)return false;',
+        '        if(rem>0)hasValidQuota=true;',
+        '      }',
+        '    }',
+        '    return hasValidQuota;',
         '  });',
-        '  if(!targets.length){alert("No inactive connections with >0% weekly remaining found on this page.");return;}',
-        '  if(confirm(`Activate ${targets.length} connections with >0% weekly remaining on this page?`)){',
+        '  if(!targets.length){alert("No inactive connections with >0% quota remaining found on this page.");return;}',
+        '  if(confirm(`Activate ${targets.length} connections with >0% quota remaining on this page?`)){',
         `    ${aliases.busySetter}(true);`,
         '    try{',
         '      await Promise.all(targets.map(e=>fetch(`/api/providers/${e.id}`,{',
@@ -764,8 +865,8 @@ function patchQuotaPageBulk() {
         `(0,a.jsxs)("button",{type:"button",onClick:__9rTurnOnAvailable,disabled:${aliases.busy},className:"flex h-8 shrink-0 items-center gap-1 rounded-lg border border-emerald-500/30 px-2 text-xs text-emerald-500 transition-colors hover:bg-emerald-500/10 disabled:opacity-50",title:"Enable connections that still have quota on the current page",children:[(0,a.jsx)("span",{className:"material-symbols-outlined text-[14px]",children:"check_circle"}),(0,a.jsx)("span",{className:"hidden sm:inline",children:"Turn on Available"})]}),`,
         `(0,a.jsxs)("button",{type:"button",onClick:bulkDelete401,disabled:${aliases.busy},className:"flex h-8 shrink-0 items-center gap-1 rounded-lg border border-red-500/30 px-2 text-xs text-red-500 transition-colors hover:bg-red-500/10 disabled:opacity-50",title:"Delete all connections with 401/402 error on the current page",children:[(0,a.jsx)("span",{className:"material-symbols-outlined text-[14px]",children:"delete_forever"}),(0,a.jsx)("span",{className:"hidden sm:inline",children:"Xóa 401/402"})]}),`,
 
-        `(0,a.jsxs)("button",{type:"button",onClick:bulkDeactivate0Weekly,disabled:${aliases.busy},className:"flex h-8 shrink-0 items-center gap-1 rounded-lg border border-amber-500/30 px-2 text-xs text-amber-500 transition-colors hover:bg-amber-500/10 disabled:opacity-50",title:"Deactivate active connections whose weekly or session token quota is 0%",children:[(0,a.jsx)("span",{className:"material-symbols-outlined text-[14px]",children:"block"}),(0,a.jsx)("span",{className:"hidden sm:inline",children:"Tắt 0% token"})]}),`,
-        `(0,a.jsxs)("button",{type:"button",onClick:bulkActivateWeekly,disabled:${aliases.busy},className:"flex h-8 shrink-0 items-center gap-1 rounded-lg border border-emerald-500/30 px-2 text-xs text-emerald-500 transition-colors hover:bg-emerald-500/10 disabled:opacity-50",title:"Activate all inactive connections with >0% weekly quota",children:[(0,a.jsx)("span",{className:"material-symbols-outlined text-[14px]",children:"play_circle"}),(0,a.jsx)("span",{className:"hidden sm:inline",children:"Bật >0% Weekly"})]})`
+        `(0,a.jsxs)("button",{type:"button",onClick:bulkDeactivate0Weekly,disabled:${aliases.busy},className:"flex h-8 shrink-0 items-center gap-1 rounded-lg border border-amber-500/30 px-2 text-xs text-amber-500 transition-colors hover:bg-amber-500/10 disabled:opacity-50",title:"Deactivate active connections whose quota is 0%",children:[(0,a.jsx)("span",{className:"material-symbols-outlined text-[14px]",children:"block"}),(0,a.jsx)("span",{className:"hidden sm:inline",children:"Tắt 0% quota"})]}),`,
+        `(0,a.jsxs)("button",{type:"button",onClick:bulkActivateWeekly,disabled:${aliases.busy},className:"flex h-8 shrink-0 items-center gap-1 rounded-lg border border-emerald-500/30 px-2 text-xs text-emerald-500 transition-colors hover:bg-emerald-500/10 disabled:opacity-50",title:"Activate all inactive connections with >0% quota",children:[(0,a.jsx)("span",{className:"material-symbols-outlined text-[14px]",children:"play_circle"}),(0,a.jsx)("span",{className:"hidden sm:inline",children:"Bật >0% quota"})]})`
     ].join('');
     
     c = c.replace(targetSearch, injectedFuncs).replace(buttonSearch, injectedButtons);
@@ -798,11 +899,27 @@ function patchDetailPageBulk() {
     
     if (c.includes('bulkDelete401')) {
         const upgrades = [
-            ['children:"Tắt 0% Weekly"', 'children:"Tắt 0% token"'],
-            ['title:"Deactivate 0% Weekly"', 'title:"Deactivate 0% token"'],
-            ['Scan active connections and deactivate those with 0% weekly remaining?', 'Scan active connections and deactivate those with 0% weekly or session token remaining?'],
-            ['No connections with 0% weekly remaining found', 'No connections with 0% token remaining found'],
-            ['const q=(quotasMap[e.id]||[]).find(q=>q.name&&q.name.toLowerCase().includes("weekly"));return q&&getRemaining(q)===0', 'const qList=quotasMap[e.id]||[];const weekly=qList.find(q=>q.name&&q.name.toLowerCase().includes("weekly"));const session=qList.find(q=>q.name&&q.name.toLowerCase().includes("session"));const q=weekly||session;return q&&getRemaining(q)===0'],
+            ['children:"Tắt 0% Weekly"', 'children:"Tắt 0% quota"'],
+            ['children:"Tắt 0% token"', 'children:"Tắt 0% quota"'],
+            ['children:"Bật >0% Weekly"', 'children:"Bật >0% quota"'],
+            ['title:"Deactivate 0% Weekly"', 'title:"Deactivate 0% quota"'],
+            ['title:"Deactivate 0% token"', 'title:"Deactivate 0% quota"'],
+            ['title:"Activate >0% Weekly"', 'title:"Activate >0% quota"'],
+            ['Deactivate 0% token', 'Deactivate 0% quota'],
+            ['Activate >0% Weekly', 'Activate >0% quota'],
+            ['Scan active connections and deactivate those with 0% weekly remaining?', 'Scan active connections and deactivate those with 0% quota remaining?'],
+            ['Scan active connections and deactivate 0% weekly/session token accounts?', 'Scan active connections and deactivate 0% quota accounts?'],
+            ['Scan active connections and deactivate those with 0% weekly or session token remaining?', 'Scan active connections and deactivate those with 0% quota remaining?'],
+            ['No connections with 0% weekly remaining found', 'No connections with 0% quota remaining found'],
+            ['No connections with 0% token remaining found', 'No connections with 0% quota remaining found'],
+            ['No inactive connections with >0% weekly remaining found', 'No inactive connections with >0% quota remaining found'],
+            ['connections with 0% token remaining?', 'connections with 0% quota remaining?'],
+            ['connections with >0% weekly remaining?', 'connections with >0% quota remaining?'],
+            ['const q=(quotasMap[e.id]||[]).find(q=>q.name&&q.name.toLowerCase().includes("weekly"));return q&&getRemaining(q)===0', 'const qData=quotasMap[e.id];if(!qData)return false;if(qData.limitReached)return true;const list=Array.isArray(qData)?qData:(qData.quotas||[]);if(!list.length)return false;for(let q of list){let rem=getRemaining(q);if(rem!==null&&rem===0)return true;}return false;'],
+            ['const qList=quotasMap[e.id]||[];const weekly=qList.find(q=>q.name&&q.name.toLowerCase().includes("weekly"));const session=qList.find(q=>q.name&&q.name.toLowerCase().includes("session"));const q=weekly||session;return q&&getRemaining(q)===0', 'const qData=quotasMap[e.id];if(!qData)return false;if(qData.limitReached)return true;const list=Array.isArray(qData)?qData:(qData.quotas||[]);if(!list.length)return false;for(let q of list){let rem=getRemaining(q);if(rem!==null&&rem===0)return true;}return false;'],
+            ['let qData=quotasMap[e.id];if(!qData)return false;if(qData.limitReached)return true;let list=qData.quotas||[],weekly=list.find(q=>q.name&&q.name.toLowerCase().includes("weekly")),session=list.find(q=>q.name&&q.name.toLowerCase().includes("session")),wRem=__9rGetRemaining(weekly),sRem=__9rGetRemaining(session);return (sRem!==null&&sRem===0)||(wRem!==null&&wRem===0)', 'let qData=quotasMap[e.id];if(!qData)return false;if(qData.limitReached)return true;let list=Array.isArray(qData)?qData:(qData.quotas||[]);if(!list.length)return false;for(let q of list){let rem=__9rGetRemaining(q);if(rem!==null&&rem===0)return true;}return false;'],
+            ['let qData=quotasMap[e.id];if(!qData)return false;if(qData.limitReached)return true;let list=Array.isArray(qData)?qData:(qData.quotas||[]),weekly=list.find(q=>q.name&&q.name.toLowerCase().includes("weekly")),session=list.find(q=>q.name&&q.name.toLowerCase().includes("session")),wRem=__9rGetRemaining(weekly),sRem=__9rGetRemaining(session);return (sRem!==null&&sRem===0)||(wRem!==null&&wRem===0)', 'let qData=quotasMap[e.id];if(!qData)return false;if(qData.limitReached)return true;let list=Array.isArray(qData)?qData:(qData.quotas||[]);if(!list.length)return false;for(let q of list){let rem=__9rGetRemaining(q);if(rem!==null&&rem===0)return true;}return false;'],
+            ['await Promise.all(conns.map(async connection=>{try{let response=await fetch("/api/usage/"+connection.id);if(response.ok){let data=await response.json(),raw=data.quotas||{},quotas=Array.isArray(raw)?raw:Object.entries(raw).map(([name,value])=>({name,...value}));results[connection.id]=quotas;results[connection.id]._message=data.message||null}}catch(e){console.log("Error fetching usage:",e)}}));return results', 'const BATCH=15;for(let i=0;i<conns.length;i+=BATCH){const chunk=conns.slice(i,i+BATCH);await Promise.all(chunk.map(async connection=>{try{let response=await fetch("/api/usage/"+connection.id);if(response.ok){let data=await response.json(),raw=data.quotas||{},quotas=Array.isArray(raw)?raw:Object.entries(raw).map(([name,value])=>({name,...value}));results[connection.id]={quotas:quotas,limitReached:Boolean(data.limitReached),_message:data.message||null}}}catch(e){console.log("Error fetching usage:",e)}}))}return results'],
         ];
         let upgraded = false;
         for (const [from, to] of upgrades) {
@@ -811,12 +928,183 @@ function patchDetailPageBulk() {
                 upgraded = true;
             }
         }
+        const sharedSsoModalCode = `var __9rLogInterval=null;var __9rAutoScroll=true;` +
+            `var __9rCloseModal=()=>{if(__9rLogInterval){clearInterval(__9rLogInterval);__9rLogInterval=null;}const el=document.getElementById("__9r_sso_modal");if(el)el.remove();};` +
+            `var __9rSsoRunner=(m)=>{const st=document.getElementById("__9r_chk_stealth");const isSt=st?st.checked:true;fetch("/api/oauth/codex/bulk-import",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"launch_runner",mode:m,stealth:isSt})}).then(r=>r.json()).then(d=>{alert(d.message||"🚀 Tiến trình Auto-Login đang xử lý!");__9rViewLogs();}).catch(e=>{alert("🚀 Tiến trình đang được khởi động...");});};` +
+            `var __9rViewLogs=()=>{fetch("/api/oauth/codex/bulk-import",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"get_logs",lineCount:200})}).then(r=>r.json()).then(d=>{let logBox=document.getElementById("__9r_log_content");if(logBox){const wasBottom = logBox.scrollHeight - logBox.scrollTop <= logBox.clientHeight + 50;logBox.textContent=d.logs||"Chưa có dữ liệu log.";if(__9rAutoScroll || wasBottom){logBox.scrollTop=logBox.scrollHeight;}}});};` +
+            `var __9rCopyLogs=()=>{let logBox=document.getElementById("__9r_log_content");if(logBox&&logBox.textContent){navigator.clipboard.writeText(logBox.textContent).then(()=>{const btn=document.getElementById("__9r_btn_copy_log");if(btn){const old=btn.textContent;btn.textContent="✅ Đã Copy!";setTimeout(()=>btn.textContent=old,1500);}}).catch(()=>{alert("Vui lòng chọn văn bản và nhấn Ctrl+C để sao chép.");});}};` +
+            `var __9rToggleAutoScroll=()=>{__9rAutoScroll=!__9rAutoScroll;const btn=document.getElementById("__9r_btn_autoscroll");if(btn){btn.textContent=__9rAutoScroll?"⚡ Tự cuộn: BẬT":"⏸️ Tự cuộn: TẮT";btn.className=__9rAutoScroll?"px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 text-xs font-mono transition-colors cursor-pointer":"px-2.5 py-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 text-xs font-mono transition-colors cursor-pointer";}};` +
+            `var chromeSsoModal=()=>{` +
+            `__9rCloseModal();` +
+            `const modal=document.createElement("div");` +
+            `modal.id="__9r_sso_modal";` +
+            `modal.className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/80 backdrop-blur-md overflow-hidden";` +
+            `modal.innerHTML=\`<div style="max-height: 92vh; display: flex; flex-direction: column;" class="relative w-full max-w-6xl xl:max-w-7xl max-h-[94vh] flex flex-col bg-[#0d1117] border border-[#30363d] rounded-2xl shadow-2xl text-[#c9d1d9] font-sans text-sm animate-in fade-in zoom-in-95 duration-150 overflow-hidden">` +
+            `<div class="flex items-center justify-between px-6 py-3.5 border-b border-[#30363d] bg-[#161b22] shrink-0">` +
+            `<div class="flex items-center gap-3"><span class="text-2xl">⚡</span><div><h2 class="text-base font-bold text-white tracking-wide">Trình Tự Động Đăng Nhập & Đồng Bộ 9Router</h2><p class="text-xs text-gray-400">Tự động SSO Gmail qua Chrome Profile & Điền Email/Password + 2FA TOTP cho Domain</p></div></div>` +
+            `<div class="flex items-center gap-2">` +
+            `<button id="__9r_btn_close" class="w-8 h-8 rounded-full bg-[#21262d] hover:bg-red-500/20 hover:text-red-400 text-gray-400 flex items-center justify-center transition-colors text-base font-bold cursor-pointer">✕</button>` +
+            `</div>` +
+            `</div>` +
+            `<div class="p-5 overflow-y-auto flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 bg-[#0d1117]">` +
+            `<div class="lg:col-span-4 flex flex-col space-y-3">` +
+            `<div id="__9r_stats_bar" class="p-3.5 rounded-xl bg-[#161b22] border border-[#30363d] text-xs text-gray-300 space-y-2">` +
+            `<div class="font-semibold text-gray-200 flex items-center gap-2"><span>📊</span><span>Thống Kê Trạng Thái Tài Khoản</span></div>` +
+            `<div id="__9r_stats_content" class="text-gray-400">⏳ Đang lấy dữ liệu tài khoản...</div>` +
+            `</div>` +
+            `<div class="p-3 rounded-xl bg-[#161b22] border border-[#30363d] flex items-center justify-between shadow-sm">` +
+            `<div class="flex items-center gap-2.5">` +
+            `<span class="text-lg">🥷</span>` +
+            `<div><div class="font-semibold text-gray-200 text-xs flex items-center gap-1.5"><span>Chạy Ẩn Tàng Hình</span><span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">Khuyên dùng</span></div><div class="text-[11px] text-gray-400 mt-0.5">Ẩn Terminal đen & Đẩy Chrome ra ngoài màn hình</div></div>` +
+            `</div>` +
+            `<label class="relative inline-flex items-center cursor-pointer">` +
+            `<input type="checkbox" id="__9r_chk_stealth" checked class="sr-only peer">` +
+            `<div class="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>` +
+            `</label>` +
+            `</div>` +
+            `<div class="space-y-2 flex-1">` +
+            `<button id="__9r_btn_all" class="w-full text-left p-3.5 rounded-xl border border-emerald-500/40 bg-[#161b22] hover:bg-emerald-500/10 hover:border-emerald-400 transition-all flex items-center justify-between cursor-pointer group shadow-sm">` +
+            `<div><div class="font-semibold text-emerald-400 flex items-center gap-1.5">⚡ 1. Tất cả tài khoản cần xử lý</div><div class="text-xs text-gray-400 mt-0.5" id="__9r_desc_all">Bỏ qua Live 🟢 & Tắt ⏸️ -> Chỉ nạp nick thiếu/lỗi</div></div>` +
+            `<span class="text-xs font-mono font-bold text-emerald-400 group-hover:translate-x-1 transition-transform bg-emerald-500/10 px-2.5 py-1 rounded-lg" id="__9r_badge_all">Chạy hết →</span>` +
+            `</button>` +
+            `<button id="__9r_btn_gmail" class="w-full text-left p-3.5 rounded-xl border border-sky-500/40 bg-[#161b22] hover:bg-sky-500/10 hover:border-sky-400 transition-all flex items-center justify-between cursor-pointer group shadow-sm">` +
+            `<div><div class="font-semibold text-sky-400 flex items-center gap-1.5">🌐 2. Chỉ Gmail Profile Chrome</div><div class="text-xs text-gray-400 mt-0.5" id="__9r_desc_gmail">Mở các Profile Chrome chưa nạp token</div></div>` +
+            `<span class="text-xs font-mono font-bold text-sky-400 group-hover:translate-x-1 transition-transform bg-sky-500/10 px-2.5 py-1 rounded-lg" id="__9r_badge_gmail">Gmail →</span>` +
+            `</button>` +
+            `<button id="__9r_btn_domain" class="w-full text-left p-3.5 rounded-xl border border-indigo-500/40 bg-[#161b22] hover:bg-indigo-500/10 hover:border-indigo-400 transition-all flex items-center justify-between cursor-pointer group shadow-sm">` +
+            `<div><div class="font-semibold text-indigo-400 flex items-center gap-1.5">🏢 3. Chỉ Email Domain (Ẩn danh + 2FA)</div><div class="text-xs text-gray-400 mt-0.5" id="__9r_desc_domain">Tự động gõ Email, Mật khẩu & tính mã TOTP</div></div>` +
+            `<span class="text-xs font-mono font-bold text-indigo-400 group-hover:translate-x-1 transition-transform bg-indigo-500/10 px-2.5 py-1 rounded-lg" id="__9r_badge_domain">Domain →</span>` +
+            `</button>` +
+            `<button id="__9r_btn_revoked" class="w-full text-left p-3.5 rounded-xl border border-red-500/40 bg-[#161b22] hover:bg-red-500/10 hover:border-red-400 transition-all flex items-center justify-between cursor-pointer group shadow-sm">` +
+            `<div><div class="font-semibold text-red-400 flex items-center gap-1.5">🔴 4. Chỉ tài khoản Lỗi Token Revoked</div><div class="text-xs text-gray-400 mt-0.5" id="__9r_desc_revoked">Tập trung fix lại các nick bị Token Revoked/401</div></div>` +
+            `<span class="text-xs font-mono font-bold text-red-400 group-hover:translate-x-1 transition-transform bg-red-500/10 px-2.5 py-1 rounded-lg" id="__9r_badge_revoked">Fix Lỗi →</span>` +
+            `</button>` +
+            `</div>` +
+            `<div class="p-3 rounded-xl bg-[#161b22] border border-[#30363d] text-xs text-gray-400 space-y-1">` +
+            `<div class="font-medium text-gray-300">⌨️ Phím Tắt Terminal Trong Lúc Chạy:</div>` +
+            `<div>• Nhấn <span class="font-mono px-1.5 py-0.5 rounded bg-[#21262d] text-yellow-300">[S]</span> hoặc <span class="font-mono px-1.5 py-0.5 rounded bg-[#21262d] text-yellow-300">[Space]</span>: Bỏ qua tài khoản hiện tại</div>` +
+            `<div>• Nhấn <span class="font-mono px-1.5 py-0.5 rounded bg-[#21262d] text-red-400">[D]</span>: Đánh dấu Deactivated & chuyển nick</div>` +
+            `</div>` +
+            `</div>` +
+            `<div class="lg:col-span-8 flex flex-col min-h-[420px] lg:min-h-[500px]">` +
+            `<div class="flex items-center justify-between px-3.5 py-2.5 rounded-t-xl bg-[#161b22] border-t border-x border-[#30363d] text-xs text-gray-400">` +
+            `<div class="flex items-center gap-2">` +
+            `<span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>` +
+            `<span class="font-semibold text-gray-200">Nhật Ký Thời Gian Thực (Live Terminal Stream):</span>` +
+            `</div>` +
+            `<div class="flex items-center gap-2">` +
+            `<button id="__9r_btn_autoscroll" onclick="__9rToggleAutoScroll()" class="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 text-xs font-mono transition-colors cursor-pointer">⚡ Tự cuộn: BẬT</button>` +
+            `<button id="__9r_btn_copy_log" class="px-2.5 py-1 rounded bg-[#21262d] hover:bg-[#30363d] text-gray-300 hover:text-white transition-colors cursor-pointer text-xs">📋 Copy</button>` +
+            `<button id="__9r_btn_refresh_log" class="px-2.5 py-1 rounded bg-[#21262d] hover:bg-[#30363d] text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer text-xs">🔄 Làm mới</button>` +
+            `</div>` +
+            `</div>` +
+            `<pre id="__9r_log_content" style="max-height: 440px; height: 440px; overflow-y: auto;" class="w-full flex-1 min-h-[380px] max-h-[560px] overflow-y-auto overflow-x-auto p-4 rounded-b-xl bg-[#040608] border border-[#30363d] text-emerald-400 font-mono text-xs md:text-[13px] leading-relaxed select-text whitespace-pre shadow-inner">Đang tải nhật ký thời gian thực...</pre>` +
+            `</div>` +
+            `</div>` +
+            `<div class="px-6 py-3 border-t border-[#30363d] flex items-center justify-between text-xs text-gray-400 shrink-0 bg-[#161b22]">` +
+            `<span class="font-mono text-gray-400 flex items-center gap-1.5"><span class="text-emerald-400">●</span> File nhật ký nguồn: <b class="text-gray-300">logs/auto-login.log</b></span>` +
+            `<button id="__9r_btn_close_bottom" class="px-4 py-1.5 rounded-lg bg-[#21262d] hover:bg-[#30363d] text-gray-200 font-medium transition-colors border border-[#30363d] cursor-pointer">Đóng Cửa Sổ</button>` +
+            `</div>` +
+            `</div>\`;` +
+            `document.body.appendChild(modal);` +
+            `document.getElementById("__9r_btn_close").onclick=__9rCloseModal;` +
+            `document.getElementById("__9r_btn_close_bottom").onclick=__9rCloseModal;` +
+            `document.getElementById("__9r_btn_all").onclick=()=>__9rSsoRunner("all");` +
+            `document.getElementById("__9r_btn_gmail").onclick=()=>__9rSsoRunner("gmail");` +
+            `document.getElementById("__9r_btn_domain").onclick=()=>__9rSsoRunner("domain");` +
+            `document.getElementById("__9r_btn_revoked").onclick=()=>__9rSsoRunner("revoked");` +
+            `document.getElementById("__9r_btn_refresh_log").onclick=__9rViewLogs;` +
+            `document.getElementById("__9r_btn_copy_log").onclick=__9rCopyLogs;` +
+            `__9rViewLogs();` +
+            `if(!__9rLogInterval){__9rLogInterval=setInterval(__9rViewLogs,2000);}` +
+            `fetch("/api/oauth/codex/bulk-import",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"get_status"})}).then(r=>r.json()).then(d=>{` +
+            `const statsContent=document.getElementById("__9r_stats_content");` +
+            `if(statsContent&&d.success){` +
+            `statsContent.innerHTML=\`<div class="grid grid-cols-2 gap-1.5 pt-1"><div>🟢 Live: <b class="text-emerald-400">\${d.liveCount||0}</b></div><div>⏸️ Tắt: <b class="text-yellow-400">\${d.disabledCount||0}</b></div><div>🔴 Lỗi: <b class="text-red-400">\${d.revokedCount||0}</b></div><div>⚪ Chưa nạp: <b class="text-amber-400">\${d.missingCount||0}</b></div>\${d.deactCount?'<div class=\"col-span-2 text-purple-400 text-[11px]\">⛔ Đã bị OpenAI khóa: <b>'+d.deactCount+'</b> nick</div>':''}</div><div class="pt-1.5 border-t border-[#30363d]/60 text-[11px] text-gray-400">Tổng tài khoản trong danh sách: <b class="text-white">\${d.totalAccounts||0}</b></div>\`;` +
+            `document.getElementById("__9r_desc_all").textContent=\`Bỏ qua \${d.liveCount||0} Live 🟢 & \${d.disabledCount||0} Tắt ⏸️ -> Nạp \${d.needRunTotal||0} nick\`;` +
+            `document.getElementById("__9r_badge_all").textContent=\`Chạy (\${d.needRunTotal||0}) →\`;` +
+            `document.getElementById("__9r_badge_gmail").textContent=\`Gmail (\${d.gmailNeedRun||0}) →\`;` +
+            `document.getElementById("__9r_badge_domain").textContent=\`Domain (\${d.domainNeedRun||0}) →\`;` +
+            `document.getElementById("__9r_badge_revoked").textContent=\`Fix (\${d.revokedCount||0}) →\`;` +
+            `}` +
+            `});` +
+            `};`;
+
+        if (c.includes('var chromeSsoModal=')) {
+            const oldModalRegex = /(?:var\s+__9rLogInterval[\s\S]*?)?var\s+__9rCloseModal=[\s\S]*?var\s+chromeSsoModal=[\s\S]*?document\.body\.appendChild\(modal\);[\s\S]*?\};\r?\n(?=function B\(\)\{)/;
+            if (oldModalRegex.test(c)) {
+                c = c.replace(oldModalRegex, sharedSsoModalCode + '\n');
+                upgraded = true;
+            }
+        } else {
+            c = c.replace('function B(){', sharedSsoModalCode + '\nfunction B(){');
+            upgraded = true;
+        }
+
+        if (!c.includes('Auto-Login Manager')) {
+            const testConnAnchor = '"Test Connection One-by-One"})';
+            const testConnIdx = c.indexOf(testConnAnchor);
+            if (testConnIdx !== -1) {
+                const startIdx = c.lastIndexOf('(0,', testConnIdx);
+                const testBtn = c.slice(startIdx, testConnIdx + testConnAnchor.length);
+                const jsxMatch = testBtn.match(/\(0,([A-Za-z_$][\w$]*)\.jsx\)\(([A-Za-z_$][\w$]*)\.\$n/);
+                if (jsxMatch) {
+                    const jsxAlias = jsxMatch[1];
+                    const componentAlias = jsxMatch[2];
+                    const injectedButtons = testBtn + ',' +
+                        `"codex"===${providerId}&&(0,${jsxAlias}.jsx)(${componentAlias}.$n,{size:"sm",variant:"secondary",icon:"smart_toy",onClick:chromeSsoModal,children:"⚡ Auto-Login Manager"}),` +
+                        `(0,${jsxAlias}.jsx)(${componentAlias}.$n,{size:"sm",variant:"secondary",icon:"delete_forever",onClick:bulkDelete401,children:"Xóa 401/402"}),` +
+                        `(0,${jsxAlias}.jsx)(${componentAlias}.$n,{size:"sm",variant:"secondary",icon:"block",onClick:bulkDeactivate0Weekly,children:"Tắt 0% quota"}),` +
+                        `(0,${jsxAlias}.jsx)(${componentAlias}.$n,{size:"sm",variant:"secondary",icon:"play_circle",onClick:bulkActivateWeekly,children:"Bật >0% quota"})`;
+                    c = c.replace(testBtn, injectedButtons);
+                    upgraded = true;
+                }
+            } else {
+                const deleteBtnPattern = /,\(0,([A-Za-z_$][\w$]*)\.jsx\)\(([A-Za-z_$][\w$]*)\.\$n,\{size:"sm",icon:"delete_forever",variant:"secondary",onClick:bulkDelete401,children:"Xóa 401\/402"\}/;
+                const matchBtn = c.match(deleteBtnPattern);
+                if (matchBtn) {
+                    const ssoBtn = `,"codex"===${providerId}&&(0,${matchBtn[1]}.jsx)(${matchBtn[2]}.$n,{size:"sm",icon:"sync_alt",variant:"secondary",onClick:chromeSsoModal,children:"⚡ Auto-Login Manager"})` + matchBtn[0];
+                    c = c.replace(matchBtn[0], ssoBtn);
+                    upgraded = true;
+                }
+            }
+        }
+
         if (!isProviderDetailBulkPatched(c)) {
             console.log('  ✗ Existing provider detail bulk patch could not be upgraded');
             return false;
         }
         if (upgraded) fs.writeFileSync(file, c, 'utf8');
-        console.log(upgraded ? '  ✅ Upgraded provider zero-token action' : '  → Already patched');
+
+        // Sync Server SSR Component
+        const serverFile = path.join(BUILD, 'server/app/(dashboard)/dashboard/providers/[id]/page.js');
+        if (fs.existsSync(serverFile)) {
+            let sc = fs.readFileSync(serverFile, 'utf8');
+            if (!sc.includes('Auto-Login Manager')) {
+                const testConnAnchor = '"Test Connection One-by-One"})';
+                const testConnIdx = sc.indexOf(testConnAnchor);
+                if (testConnIdx !== -1) {
+                    const startIdx = sc.lastIndexOf('(0,', testConnIdx);
+                    const testBtn = sc.slice(startIdx, testConnIdx + testConnAnchor.length);
+                    const jsxMatch = testBtn.match(/\(0,([A-Za-z_$][\w$]*)\.jsx\)\(([A-Za-z_$][\w$]*)\.\$n/);
+                    if (jsxMatch) {
+                        const jsxAlias = jsxMatch[1];
+                        const componentAlias = jsxMatch[2];
+                        const sProviderIdMatch = sc.match(/,([A-Za-z0-9_$]+)=\(0,[A-Za-z0-9_$]+\.use\)\([A-Za-z0-9_$]+\.params\)\.id/) || sc.match(/"codex"===([A-Za-z0-9_$]+)&&\(0,/);
+                        const sProviderId = sProviderIdMatch ? sProviderIdMatch[1] : 'r';
+                        const injectedButtons = testBtn + ',' +
+                            `"codex"===${sProviderId}&&(0,${jsxAlias}.jsx)(${componentAlias}.$n,{size:"sm",variant:"secondary",icon:"smart_toy",onClick:()=>{},children:"⚡ Auto-Login Manager"}),` +
+                            `(0,${jsxAlias}.jsx)(${componentAlias}.$n,{size:"sm",variant:"secondary",icon:"delete_forever",onClick:()=>{},children:"Xóa 401/402"}),` +
+                            `(0,${jsxAlias}.jsx)(${componentAlias}.$n,{size:"sm",variant:"secondary",icon:"block",onClick:()=>{},children:"Tắt 0% quota"}),` +
+                            `(0,${jsxAlias}.jsx)(${componentAlias}.$n,{size:"sm",variant:"secondary",icon:"play_circle",onClick:()=>{},children:"Bật >0% quota"})`;
+                        sc = sc.replace(testBtn, injectedButtons);
+                        fs.writeFileSync(serverFile, sc, 'utf8');
+                    }
+                }
+            }
+        }
+
+        console.log(upgraded ? '  ✅ Upgraded provider zero-quota & Chrome SSO actions (Client + Server)' : '  → Already patched');
         return true;
     }
     
@@ -835,31 +1123,154 @@ function patchDetailPageBulk() {
 
         const modernTarget = modernTargetInfo.source;
         const connections = connectionsMatch[2];
+        const modernAnchors = getModernProviderDetailAnchors(c);
+        const refreshAlias = modernAnchors ? modernAnchors.refreshAlias : 'tg';
+        const jsxAlias = modernButtonMatch[1];
+        const componentAlias = modernButtonMatch[2];
+        const ssoModalCode = `window.__9rLogInterval=null;window.__9rAutoScroll=true;` +
+            `window.__9rCloseModal=()=>{if(window.__9rLogInterval){clearInterval(window.__9rLogInterval);window.__9rLogInterval=null;}const el=document.getElementById("__9r_sso_modal");if(el)el.remove();};` +
+            `window.__9rSsoRunner=(m)=>{const st=document.getElementById("__9r_chk_stealth");const isSt=st?st.checked:true;fetch("/api/oauth/codex/bulk-import",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"launch_runner",mode:m,stealth:isSt})}).then(r=>r.json()).then(d=>{alert(d.message||"🚀 Tiến trình Auto-Login đang xử lý!");window.__9rViewLogs();}).catch(e=>{alert("🚀 Tiến trình đang được khởi động...");});};` +
+            `window.__9rViewLogs=()=>{fetch("/api/oauth/codex/bulk-import",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"get_logs",lineCount:200})}).then(r=>r.json()).then(d=>{let logBox=document.getElementById("__9r_log_content");if(logBox){const wasBottom = logBox.scrollHeight - logBox.scrollTop <= logBox.clientHeight + 50;logBox.textContent=d.logs||"Chưa có dữ liệu log.";if(window.__9rAutoScroll || wasBottom){logBox.scrollTop=logBox.scrollHeight;}}});};` +
+            `window.__9rCopyLogs=()=>{let logBox=document.getElementById("__9r_log_content");if(logBox&&logBox.textContent){navigator.clipboard.writeText(logBox.textContent).then(()=>{const btn=document.getElementById("__9r_btn_copy_log");if(btn){const old=btn.textContent;btn.textContent="✅ Đã Copy!";setTimeout(()=>btn.textContent=old,1500);}}).catch(()=>{alert("Vui lòng chọn văn bản và nhấn Ctrl+C để sao chép.");});}};` +
+            `window.__9rToggleAutoScroll=()=>{window.__9rAutoScroll=!window.__9rAutoScroll;const btn=document.getElementById("__9r_btn_autoscroll");if(btn){btn.textContent=window.__9rAutoScroll?"⚡ Tự cuộn: BẬT":"⏸️ Tự cuộn: TẮT";btn.className=window.__9rAutoScroll?"px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 text-xs font-mono transition-colors cursor-pointer":"px-2.5 py-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 text-xs font-mono transition-colors cursor-pointer";}};` +
+            `chromeSsoModal=()=>{` +
+            `window.__9rCloseModal();` +
+            `const modal=document.createElement("div");` +
+            `modal.id="__9r_sso_modal";` +
+            `modal.className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/80 backdrop-blur-md overflow-hidden";` +
+            `modal.innerHTML=\`<div style="max-height: 92vh; display: flex; flex-direction: column;" class="relative w-full max-w-6xl xl:max-w-7xl max-h-[94vh] flex flex-col bg-[#0d1117] border border-[#30363d] rounded-2xl shadow-2xl text-[#c9d1d9] font-sans text-sm animate-in fade-in zoom-in-95 duration-150 overflow-hidden">` +
+            `<div class="flex items-center justify-between px-6 py-3.5 border-b border-[#30363d] bg-[#161b22] shrink-0">` +
+            `<div class="flex items-center gap-3"><span class="text-2xl">⚡</span><div><h2 class="text-base font-bold text-white tracking-wide">Trình Tự Động Đăng Nhập & Đồng Bộ 9Router</h2><p class="text-xs text-gray-400">Tự động SSO Gmail qua Chrome Profile & Điền Email/Password + 2FA TOTP cho Domain</p></div></div>` +
+            `<div class="flex items-center gap-2">` +
+            `<button id="__9r_btn_close" class="w-8 h-8 rounded-full bg-[#21262d] hover:bg-red-500/20 hover:text-red-400 text-gray-400 flex items-center justify-center transition-colors text-base font-bold cursor-pointer">✕</button>` +
+            `</div>` +
+            `</div>` +
+            `<div class="p-5 overflow-y-auto flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 bg-[#0d1117]">` +
+            `<div class="lg:col-span-4 flex flex-col space-y-3">` +
+            `<div id="__9r_stats_bar" class="p-3.5 rounded-xl bg-[#161b22] border border-[#30363d] text-xs text-gray-300 space-y-2">` +
+            `<div class="font-semibold text-gray-200 flex items-center gap-2"><span>📊</span><span>Thống Kê Trạng Thái Tài Khoản</span></div>` +
+            `<div id="__9r_stats_content" class="text-gray-400">⏳ Đang lấy dữ liệu tài khoản...</div>` +
+            `</div>` +
+            `<div class="p-3 rounded-xl bg-[#161b22] border border-[#30363d] flex items-center justify-between shadow-sm">` +
+            `<div class="flex items-center gap-2.5">` +
+            `<span class="text-lg">🥷</span>` +
+            `<div><div class="font-semibold text-gray-200 text-xs flex items-center gap-1.5"><span>Chạy Ẩn Tàng Hình</span><span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">Khuyên dùng</span></div><div class="text-[11px] text-gray-400 mt-0.5">Ẩn Terminal đen & Đẩy Chrome ra ngoài màn hình</div></div>` +
+            `</div>` +
+            `<label class="relative inline-flex items-center cursor-pointer">` +
+            `<input type="checkbox" id="__9r_chk_stealth" checked class="sr-only peer">` +
+            `<div class="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>` +
+            `</label>` +
+            `</div>` +
+            `<div class="space-y-2 flex-1">` +
+            `<button id="__9r_btn_all" class="w-full text-left p-3.5 rounded-xl border border-emerald-500/40 bg-[#161b22] hover:bg-emerald-500/10 hover:border-emerald-400 transition-all flex items-center justify-between cursor-pointer group shadow-sm">` +
+            `<div><div class="font-semibold text-emerald-400 flex items-center gap-1.5">⚡ 1. Tất cả tài khoản cần xử lý</div><div class="text-xs text-gray-400 mt-0.5" id="__9r_desc_all">Bỏ qua Live 🟢 & Tắt ⏸️ -> Chỉ nạp nick thiếu/lỗi</div></div>` +
+            `<span class="text-xs font-mono font-bold text-emerald-400 group-hover:translate-x-1 transition-transform bg-emerald-500/10 px-2.5 py-1 rounded-lg" id="__9r_badge_all">Chạy hết →</span>` +
+            `</button>` +
+            `<button id="__9r_btn_gmail" class="w-full text-left p-3.5 rounded-xl border border-sky-500/40 bg-[#161b22] hover:bg-sky-500/10 hover:border-sky-400 transition-all flex items-center justify-between cursor-pointer group shadow-sm">` +
+            `<div><div class="font-semibold text-sky-400 flex items-center gap-1.5">🌐 2. Chỉ Gmail Profile Chrome</div><div class="text-xs text-gray-400 mt-0.5" id="__9r_desc_gmail">Mở các Profile Chrome chưa nạp token</div></div>` +
+            `<span class="text-xs font-mono font-bold text-sky-400 group-hover:translate-x-1 transition-transform bg-sky-500/10 px-2.5 py-1 rounded-lg" id="__9r_badge_gmail">Gmail →</span>` +
+            `</button>` +
+            `<button id="__9r_btn_domain" class="w-full text-left p-3.5 rounded-xl border border-indigo-500/40 bg-[#161b22] hover:bg-indigo-500/10 hover:border-indigo-400 transition-all flex items-center justify-between cursor-pointer group shadow-sm">` +
+            `<div><div class="font-semibold text-indigo-400 flex items-center gap-1.5">🏢 3. Chỉ Email Domain (Ẩn danh + 2FA)</div><div class="text-xs text-gray-400 mt-0.5" id="__9r_desc_domain">Tự động gõ Email, Mật khẩu & tính mã TOTP</div></div>` +
+            `<span class="text-xs font-mono font-bold text-indigo-400 group-hover:translate-x-1 transition-transform bg-indigo-500/10 px-2.5 py-1 rounded-lg" id="__9r_badge_domain">Domain →</span>` +
+            `</button>` +
+            `<button id="__9r_btn_revoked" class="w-full text-left p-3.5 rounded-xl border border-red-500/40 bg-[#161b22] hover:bg-red-500/10 hover:border-red-400 transition-all flex items-center justify-between cursor-pointer group shadow-sm">` +
+            `<div><div class="font-semibold text-red-400 flex items-center gap-1.5">🔴 4. Chỉ tài khoản Lỗi Token Revoked</div><div class="text-xs text-gray-400 mt-0.5" id="__9r_desc_revoked">Tập trung fix lại các nick bị Token Revoked/401</div></div>` +
+            `<span class="text-xs font-mono font-bold text-red-400 group-hover:translate-x-1 transition-transform bg-red-500/10 px-2.5 py-1 rounded-lg" id="__9r_badge_revoked">Fix Lỗi →</span>` +
+            `</button>` +
+            `</div>` +
+            `<div class="p-3 rounded-xl bg-[#161b22] border border-[#30363d] text-xs text-gray-400 space-y-1">` +
+            `<div class="font-medium text-gray-300">⌨️ Phím Tắt Terminal Trong Lúc Chạy:</div>` +
+            `<div>• Nhấn <span class="font-mono px-1.5 py-0.5 rounded bg-[#21262d] text-yellow-300">[S]</span> hoặc <span class="font-mono px-1.5 py-0.5 rounded bg-[#21262d] text-yellow-300">[Space]</span>: Bỏ qua tài khoản hiện tại</div>` +
+            `<div>• Nhấn <span class="font-mono px-1.5 py-0.5 rounded bg-[#21262d] text-red-400">[D]</span>: Đánh dấu Deactivated & chuyển nick</div>` +
+            `</div>` +
+            `</div>` +
+            `<div class="lg:col-span-8 flex flex-col min-h-[420px] lg:min-h-[500px]">` +
+            `<div class="flex items-center justify-between px-3.5 py-2.5 rounded-t-xl bg-[#161b22] border-t border-x border-[#30363d] text-xs text-gray-400">` +
+            `<div class="flex items-center gap-2">` +
+            `<span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>` +
+            `<span class="font-semibold text-gray-200">Nhật Ký Thời Gian Thực (Live Terminal Stream):</span>` +
+            `</div>` +
+            `<div class="flex items-center gap-2">` +
+            `<button id="__9r_btn_autoscroll" onclick="window.__9rToggleAutoScroll()" class="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 text-xs font-mono transition-colors cursor-pointer">⚡ Tự cuộn: BẬT</button>` +
+            `<button id="__9r_btn_copy_log" onclick="window.__9rCopyLogs()" class="px-2.5 py-1 rounded bg-[#21262d] hover:bg-[#30363d] text-gray-300 hover:text-white transition-colors cursor-pointer text-xs">📋 Copy</button>` +
+            `<button id="__9r_btn_refresh_log" onclick="window.__9rViewLogs()" class="px-2.5 py-1 rounded bg-[#21262d] hover:bg-[#30363d] text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer text-xs">🔄 Làm mới</button>` +
+            `</div>` +
+            `</div>` +
+            `<pre id="__9r_log_content" style="max-height: 440px; height: 440px; overflow-y: auto;" class="w-full flex-1 min-h-[380px] max-h-[560px] overflow-y-auto overflow-x-auto p-4 rounded-b-xl bg-[#040608] border border-[#30363d] text-emerald-400 font-mono text-xs md:text-[13px] leading-relaxed select-text whitespace-pre shadow-inner">Đang tải nhật ký thời gian thực...</pre>` +
+            `</div>` +
+            `</div>` +
+            `<div class="px-6 py-3 border-t border-[#30363d] flex items-center justify-between text-xs text-gray-400 shrink-0 bg-[#161b22]">` +
+            `<span class="font-mono text-gray-400 flex items-center gap-1.5"><span class="text-emerald-400">●</span> File nhật ký nguồn: <b class="text-gray-300">logs/auto-login.log</b></span>` +
+            `<button id="__9r_btn_close_bottom" onclick="window.__9rCloseModal()" class="px-4 py-1.5 rounded-lg bg-[#21262d] hover:bg-[#30363d] text-gray-200 font-medium transition-colors border border-[#30363d] cursor-pointer">Đóng Cửa Sổ</button>` +
+            `</div>` +
+            `</div>\`;` +
+            `document.body.appendChild(modal);` +
+            `document.getElementById("__9r_btn_close").onclick=window.__9rCloseModal;` +
+            `document.getElementById("__9r_btn_all").onclick=()=>window.__9rSsoRunner("all");` +
+            `document.getElementById("__9r_btn_gmail").onclick=()=>window.__9rSsoRunner("gmail");` +
+            `document.getElementById("__9r_btn_domain").onclick=()=>window.__9rSsoRunner("domain");` +
+            `document.getElementById("__9r_btn_revoked").onclick=()=>window.__9rSsoRunner("revoked");` +
+            `window.__9rViewLogs();` +
+            `if(!window.__9rLogInterval){window.__9rLogInterval=setInterval(window.__9rViewLogs,2000);}` +
+            `fetch("/api/oauth/codex/bulk-import",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"get_status"})}).then(r=>r.json()).then(d=>{` +
+            `const statsContent=document.getElementById("__9r_stats_content");` +
+            `if(statsContent&&d.success){` +
+            `statsContent.innerHTML=\`<div class="grid grid-cols-2 gap-1.5 pt-1"><div>🟢 Live: <b class="text-emerald-400">\${d.liveCount||0}</b></div><div>⏸️ Tắt: <b class="text-yellow-400">\${d.disabledCount||0}</b></div><div>🔴 Lỗi: <b class="text-red-400">\${d.revokedCount||0}</b></div><div>⚪ Chưa nạp: <b class="text-amber-400">\${d.missingCount||0}</b></div>\${d.deactCount?'<div class=\"col-span-2 text-purple-400 text-[11px]\">⛔ Đã bị OpenAI khóa: <b>'+d.deactCount+'</b> nick</div>':''}</div><div class="pt-1.5 border-t border-[#30363d]/60 text-[11px] text-gray-400">Tổng tài khoản trong danh sách: <b class="text-white">\${d.totalAccounts||0}</b></div>\`;` +
+            `document.getElementById("__9r_desc_all").textContent=\`Bỏ qua \${d.liveCount||0} Live 🟢 & \${d.disabledCount||0} Tắt ⏸️ -> Nạp \${d.needRunTotal||0} nick\`;` +
+            `document.getElementById("__9r_badge_all").textContent=\`Chạy (\${d.needRunTotal||0}) →\`;` +
+            `document.getElementById("__9r_badge_gmail").textContent=\`Gmail (\${d.gmailNeedRun||0}) →\`;` +
+            `document.getElementById("__9r_badge_domain").textContent=\`Domain (\${d.domainNeedRun||0}) →\`;` +
+            `document.getElementById("__9r_badge_revoked").textContent=\`Fix (\${d.revokedCount||0}) →\`;` +
+            `}` +
+            `});` +
+            `},`;
+
         const modernFuncs = [
             ',__9rFetchAllQuotas=async conns=>{',
             'let results={};',
-            'await Promise.all(conns.map(async connection=>{try{',
-            'let response=await fetch("/api/usage/"+connection.id);',
-            'if(response.ok){let data=await response.json(),raw=data.quotas||{},quotas=Array.isArray(raw)?raw:Object.entries(raw).map(([name,value])=>({name,...value}));results[connection.id]=quotas;results[connection.id]._message=data.message||null}',
-            '}catch(e){console.log("Error fetching usage:",e)}}));',
+            'const BATCH=15;',
+            'for(let i=0;i<conns.length;i+=BATCH){',
+            '  const chunk=conns.slice(i,i+BATCH);',
+            '  await Promise.all(chunk.map(async connection=>{try{',
+            '    let response=await fetch("/api/usage/"+connection.id);',
+            '    if(response.ok){',
+            '      let data=await response.json(),raw=data.quotas||{},quotas=Array.isArray(raw)?raw:Object.entries(raw).map(([name,value])=>({name,...value}));',
+            '      results[connection.id]={quotas:quotas,limitReached:Boolean(data.limitReached),_message:data.message||null};',
+            '    }',
+            '  }catch(e){console.log("Error fetching usage:",e)}}));',
+            '}',
             'return results',
-            '},__9rGetRemaining=q=>{if(!q)return 0;if(q.remaining!==undefined)return Math.max(0,Math.round(q.remaining));if(q.remainingPercentage!==undefined)return Math.round(q.remainingPercentage);if(q.total&&q.total>0)return Math.round((q.total-q.used)/q.total*100);return 0},',
-            `bulkDelete401=()=>{let conns=(${connections}||[]);if(!conns.length){${modalSetter}({title:"No targets",message:"No connections found",onConfirm:()=>${modalSetter}(null)});return}${modalSetter}({title:"Scanning for 401/402 errors...",message:"Check all connections and delete invalid 401/402 entries?",onConfirm:async()=>{${modalSetter}(null);let quotasMap=await __9rFetchAllQuotas(conns),targets=conns.filter(e=>e.errorCode===401||e.errorCode==="401"||e.errorCode===402||e.errorCode==="402"||e.testStatus==="invalid"||(e.lastError&&/[401|402]/.test(String(e.lastError)))||(quotasMap[e.id]?._message&&/[401|402]/.test(String(quotasMap[e.id]._message))));if(targets.length&&confirm("Delete "+targets.length+" connections with 401/402 errors?")){await Promise.all(targets.map(e=>fetch("/api/providers/"+e.id,{method:"DELETE"})));await tj()}}})},`,
-            `bulkDeactivate0Weekly=()=>{let active=(${connections}||[]).filter(e=>e.isActive);if(!active.length){${modalSetter}({title:"No targets",message:"No active connections found",onConfirm:()=>${modalSetter}(null)});return}${modalSetter}({title:"Deactivate 0% token",message:"Scan active connections and deactivate 0% weekly/session token accounts?",onConfirm:async()=>{${modalSetter}(null);let quotasMap=await __9rFetchAllQuotas(active),targets=active.filter(e=>{let list=quotasMap[e.id]||[],weekly=list.find(q=>q.name&&q.name.toLowerCase().includes("weekly")),session=list.find(q=>q.name&&q.name.toLowerCase().includes("session"));return __9rGetRemaining(weekly||session)===0});if(targets.length){await Promise.all(targets.map(e=>fetch("/api/providers/"+e.id,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({isActive:false})})));await tj()}}})},`,
-            `bulkActivateWeekly=()=>{let inactive=(${connections}||[]).filter(e=>!e.isActive);if(!inactive.length){${modalSetter}({title:"No targets",message:"No inactive connections found",onConfirm:()=>${modalSetter}(null)});return}${modalSetter}({title:"Activate >0% Weekly",message:"Scan inactive connections and activate accounts with weekly quota remaining?",onConfirm:async()=>{${modalSetter}(null);let quotasMap=await __9rFetchAllQuotas(inactive),targets=inactive.filter(e=>{let q=(quotasMap[e.id]||[]).find(q=>q.name&&q.name.toLowerCase().includes("weekly"));return q&&__9rGetRemaining(q)>0});if(targets.length){await Promise.all(targets.map(e=>fetch("/api/providers/"+e.id,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({isActive:true})})));await tj()}}})}`,
+            '},__9rGetRemaining=q=>{if(!q)return null;if(q.remaining!==undefined&&q.remaining!==null)return Math.max(0,Math.round(q.remaining));if(q.remainingPercentage!==undefined&&q.remainingPercentage!==null)return Math.round(q.remainingPercentage);if(q.total&&q.total>0)return Math.max(0,Math.round((q.total-(q.used||0))/q.total*100));return null},',
+            `bulkDelete401=()=>{let conns=(${connections}||[]);if(!conns.length){${modalSetter}({title:"No targets",message:"No connections found",onConfirm:()=>${modalSetter}(null)});return}${modalSetter}({title:"Scanning for 401/402 errors...",message:"Check all connections and delete invalid 401/402 entries?",onConfirm:async()=>{${modalSetter}(null);let quotasMap=await __9rFetchAllQuotas(conns),targets=conns.filter(e=>e.errorCode===401||e.errorCode==="401"||e.errorCode===402||e.errorCode==="402"||e.testStatus==="invalid"||(e.lastError&&/[401|402]/.test(String(e.lastError)))||(quotasMap[e.id]?._message&&/[401|402]/.test(String(quotasMap[e.id]._message))));if(!targets.length){alert("No 401/402 connections found");return}if(confirm("Delete "+targets.length+" connections with 401/402 errors?")){await Promise.all(targets.map(e=>fetch("/api/providers/"+e.id,{method:"DELETE"})));if(typeof ${refreshAlias}==="function")await ${refreshAlias}();}}})},`,
+            `bulkDeactivate0Weekly=()=>{let active=(${connections}||[]).filter(e=>e.isActive);if(!active.length){${modalSetter}({title:"No targets",message:"No active connections found",onConfirm:()=>${modalSetter}(null)});return}${modalSetter}({title:"Deactivate 0% quota",message:"Scan active connections and deactivate 0% quota accounts?",onConfirm:async()=>{${modalSetter}(null);let quotasMap=await __9rFetchAllQuotas(active),targets=active.filter(e=>{let qData=quotasMap[e.id];if(!qData)return false;if(qData.limitReached)return true;let list=Array.isArray(qData)?qData:(qData.quotas||[]);if(!list.length)return false;for(let q of list){let rem=__9rGetRemaining(q);if(rem!==null&&rem===0)return true;}return false;});if(targets.length&&confirm("Deactivate "+targets.length+" connections with 0% quota remaining?")){await Promise.all(targets.map(e=>fetch("/api/providers/"+e.id,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({isActive:false})})));if(typeof ${refreshAlias}==="function")await ${refreshAlias}();}else if(!targets.length){alert("No connections with 0% quota remaining found")}}})},`,
+            `bulkActivateWeekly=()=>{let inactive=(${connections}||[]).filter(e=>!e.isActive);if(!inactive.length){${modalSetter}({title:"No targets",message:"No inactive connections found",onConfirm:()=>${modalSetter}(null)});return}${modalSetter}({title:"Activate >0% quota",message:"Scan inactive connections and activate accounts with quota remaining?",onConfirm:async()=>{${modalSetter}(null);let quotasMap=await __9rFetchAllQuotas(inactive),targets=inactive.filter(e=>{let qData=quotasMap[e.id];if(!qData)return false;if(qData.limitReached)return false;let list=Array.isArray(qData)?qData:(qData.quotas||[]);if(!list.length)return false;let hasValidQuota=false;for(let q of list){let rem=__9rGetRemaining(q);if(rem!==null){if(rem===0)return false;if(rem>0)hasValidQuota=true;}}return hasValidQuota;});if(targets.length&&confirm("Activate "+targets.length+" connections with >0% quota remaining?")){await Promise.all(targets.map(e=>fetch("/api/providers/"+e.id,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({isActive:true})})));if(typeof ${refreshAlias}==="function")await ${refreshAlias}();}else if(!targets.length){alert("No inactive connections with >0% quota remaining found")}}})},`,
+            ssoModalCode,
             modernTarget,
         ].join('');
         c = c.replace(modernTarget, modernFuncs);
 
-        const jsxAlias = modernButtonMatch[1];
-        const componentAlias = modernButtonMatch[2];
-        const modernButtons = modernButtonMatch[0] + ',' +
-            `(0,${jsxAlias}.jsx)(${componentAlias}.$n,{size:"sm",icon:"delete_forever",variant:"secondary",onClick:bulkDelete401,children:"Xóa 401/402"}),` +
-            `(0,${jsxAlias}.jsx)(${componentAlias}.$n,{size:"sm",icon:"block",variant:"secondary",onClick:bulkDeactivate0Weekly,children:"Tắt 0% token"}),` +
-            `(0,${jsxAlias}.jsx)(${componentAlias}.$n,{size:"sm",icon:"play_circle",variant:"secondary",onClick:bulkActivateWeekly,children:"Bật >0% Weekly"})`;
-        c = c.split(modernButtonMatch[0]).join(modernButtons);
+        const testConnAnchor = '"Test Connection One-by-One"})';
+        const testConnIdx = c.indexOf(testConnAnchor);
+        if (testConnIdx !== -1) {
+            const startIdx = c.lastIndexOf('(0,', testConnIdx);
+            const testBtn = c.slice(startIdx, testConnIdx + testConnAnchor.length);
+            const toolbarButtons = testBtn + ',' +
+                `"codex"===${providerId}&&(0,${jsxAlias}.jsx)(${componentAlias}.$n,{size:"sm",variant:"secondary",icon:"smart_toy",onClick:chromeSsoModal,children:"⚡ Auto-Login Manager"}),` +
+                `(0,${jsxAlias}.jsx)(${componentAlias}.$n,{size:"sm",variant:"secondary",icon:"delete_forever",onClick:bulkDelete401,children:"Xóa 401/402"}),` +
+                `(0,${jsxAlias}.jsx)(${componentAlias}.$n,{size:"sm",variant:"secondary",icon:"block",onClick:bulkDeactivate0Weekly,children:"Tắt 0% quota"}),` +
+                `(0,${jsxAlias}.jsx)(${componentAlias}.$n,{size:"sm",variant:"secondary",icon:"play_circle",onClick:bulkActivateWeekly,children:"Bật >0% quota"})`;
+            c = c.replace(testBtn, toolbarButtons);
+        } else {
+            const modernButtons = modernButtonMatch[0] + ',' +
+                `"codex"===${providerId}&&(0,${jsxAlias}.jsx)(${componentAlias}.$n,{size:"sm",icon:"sync_alt",variant:"secondary",onClick:chromeSsoModal,children:"⚡ Auto-Login Manager"}),` +
+                `(0,${jsxAlias}.jsx)(${componentAlias}.$n,{size:"sm",icon:"delete_forever",variant:"secondary",onClick:bulkDelete401,children:"Xóa 401/402"}),` +
+                `(0,${jsxAlias}.jsx)(${componentAlias}.$n,{size:"sm",icon:"block",variant:"secondary",onClick:bulkDeactivate0Weekly,children:"Tắt 0% quota"}),` +
+                `(0,${jsxAlias}.jsx)(${componentAlias}.$n,{size:"sm",icon:"play_circle",variant:"secondary",onClick:bulkActivateWeekly,children:"Bật >0% quota"})`;
+            c = c.split(modernButtonMatch[0]).join(modernButtons);
+        }
 
-        if (!c.includes('bulkDelete401=()=>{') || !c.includes('children:"Tắt 0% token"')) {
+        if (!c.includes('bulkDelete401=()=>{') || (!c.includes('children:"Tắt 0% quota"') && !c.includes('children:"Tắt 0% token"'))) {
             console.log('  ✗ Modern provider detail bulk patch validation failed');
             return false;
         }
@@ -876,19 +1287,19 @@ function patchDetailPageBulk() {
     
     // Keep the let chain intact: ...,tT=async()=>{...T(!1)},fetchAllQuotas=...,bulkDelete401=...,tO=async e=>{
     const injectedFuncs = 'Auto-ping enable error:",e)}T(!1)},' +
-        'fetchAllQuotas=async(conns)=>{const results={};await Promise.all(conns.map(async(c)=>{try{const res=await fetch(`/api/usage/${c.id}`);if(res.ok){const data=await res.json();results[c.id]=data.quotas||[];results[c.id]._message=data.message||null}}catch(e){console.log("Error fetching usage:",e)}}));return results},' +
-        'getRemaining=(q)=>{if(!q)return 0;if(q.remaining!==undefined)return Math.max(0,Math.round(q.remaining));if(q.remainingPercentage!==undefined)return Math.round(q.remainingPercentage);if(q.total&&q.total>0)return Math.round((q.total-q.used)/q.total*100);return 0},' +
+        'fetchAllQuotas=async(conns)=>{const results={};const BATCH=15;for(let i=0;i<conns.length;i+=BATCH){const chunk=conns.slice(i,i+BATCH);await Promise.all(chunk.map(async(c)=>{try{const res=await fetch(`/api/usage/${c.id}`);if(res.ok){const data=await res.json();const raw=data.quotas||{};const quotas=Array.isArray(raw)?raw:Object.entries(raw).map(([k,v])=>({name:k,...v}));results[c.id]={quotas,limitReached:Boolean(data.limitReached),_message:data.message||null}}}catch(e){console.log("Error fetching usage:",e)}}))}return results},' +
+        'getRemaining=(q)=>{if(!q)return null;if(q.remaining!==undefined&&q.remaining!==null)return Math.max(0,Math.round(q.remaining));if(q.remainingPercentage!==undefined&&q.remainingPercentage!==null)return Math.round(q.remainingPercentage);if(q.total&&q.total>0)return Math.max(0,Math.round((q.total-(q.used||0))/q.total*100));return null},' +
         'bulkDelete401=()=>{const conns=(x||[]);if(!conns.length){eR({title:"No targets",message:"No connections found",onConfirm:()=>eR(null)});return}eR({title:"Scanning for 401/402 errors...",message:"Checking all connections for 401/402 errors (including usage API)...",onConfirm:async()=>{eR(null);f(true);try{const quotasMap=await fetchAllQuotas(conns);const targets=conns.filter(e=>e.errorCode===401||e.errorCode==="401"||e.errorCode===402||e.errorCode==="402"||e.testStatus==="invalid"||(e.lastError&&(String(e.lastError).includes("401")||String(e.lastError).includes("402")))||(quotasMap[e.id]?._message&&(String(quotasMap[e.id]._message).includes("401")||String(quotasMap[e.id]._message).includes("402"))));if(!targets.length){setTimeout(()=>alert("No 401/402 connections found"),300);f(false);return}if(confirm(`Delete ${targets.length} connections with 401/402 errors?`)){await Promise.all(targets.map(e=>fetch(`/api/providers/${e.id}`,{method:"DELETE"})));await tg()}else{f(false)}}catch(err){console.log(err)}finally{f(false)}}})},' +
-        'bulkDeactivate0Weekly=()=>{const activeConns=(x||[]).filter(e=>e.isActive);if(!activeConns.length){eR({title:"No targets",message:"No active connections found",onConfirm:()=>eR(null)});return}eR({title:"Deactivate 0% token",message:"Scan active connections and deactivate those with 0% weekly or session token remaining?",onConfirm:async()=>{eR(null);f(true);try{const quotasMap=await fetchAllQuotas(activeConns);const targets=activeConns.filter(e=>{const qList=quotasMap[e.id]||[];const weekly=qList.find(q=>q.name&&q.name.toLowerCase().includes("weekly"));const session=qList.find(q=>q.name&&q.name.toLowerCase().includes("session"));const q=weekly||session;return q&&getRemaining(q)===0});if(targets.length){await Promise.all(targets.map(e=>fetch(`/api/providers/${e.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({isActive:false})})));await tg()}else{setTimeout(()=>alert("No connections with 0% token remaining found"),300)}}catch(err){console.log(err)}finally{f(false)}}})},' +
-        'bulkActivateWeekly=()=>{const inactiveConns=(x||[]).filter(e=>!e.isActive);if(!inactiveConns.length){eR({title:"No targets",message:"No inactive connections found",onConfirm:()=>eR(null)});return}eR({title:"Activate >0% Weekly",message:"Scan inactive connections and activate those with >0% weekly remaining?",onConfirm:async()=>{eR(null);f(true);try{const quotasMap=await fetchAllQuotas(inactiveConns);const targets=inactiveConns.filter(e=>{const q=(quotasMap[e.id]||[]).find(q=>q.name&&q.name.toLowerCase().includes("weekly"));return q&&getRemaining(q)>0});if(targets.length){await Promise.all(targets.map(e=>fetch(`/api/providers/${e.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({isActive:true})})));await tg()}else{setTimeout(()=>alert("No inactive connections with >0% weekly remaining found"),300)}}catch(err){console.log(err)}finally{f(false)}}})},' +
+        'bulkDeactivate0Weekly=()=>{const activeConns=(x||[]).filter(e=>e.isActive);if(!activeConns.length){eR({title:"No targets",message:"No active connections found",onConfirm:()=>eR(null)});return}eR({title:"Deactivate 0% quota",message:"Scan active connections and deactivate those with 0% quota remaining?",onConfirm:async()=>{eR(null);f(true);try{const quotasMap=await fetchAllQuotas(activeConns);const targets=activeConns.filter(e=>{const qData=quotasMap[e.id];if(!qData)return false;if(qData.limitReached)return true;const list=Array.isArray(qData)?qData:(qData.quotas||[]);if(!list.length)return false;for(let q of list){let rem=getRemaining(q);if(rem!==null&&rem===0)return true;}return false;});if(targets.length&&confirm(`Deactivate ${targets.length} connections with 0% quota remaining?`)){await Promise.all(targets.map(e=>fetch(`/api/providers/${e.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({isActive:false})})));await tg()}else{setTimeout(()=>alert("No connections with 0% quota remaining found"),300)}}catch(err){console.log(err)}finally{f(false)}}})},' +
+        'bulkActivateWeekly=()=>{const inactiveConns=(x||[]).filter(e=>!e.isActive);if(!inactiveConns.length){eR({title:"No targets",message:"No inactive connections found",onConfirm:()=>eR(null)});return}eR({title:"Activate >0% quota",message:"Scan inactive connections and activate those with >0% quota remaining?",onConfirm:async()=>{eR(null);f(true);try{const quotasMap=await fetchAllQuotas(inactiveConns);const targets=inactiveConns.filter(e=>{const qData=quotasMap[e.id];if(!qData)return false;if(qData.limitReached)return false;const list=Array.isArray(qData)?qData:(qData.quotas||[]);if(!list.length)return false;let hasValidQuota=false;for(let q of list){let rem=getRemaining(q);if(rem!==null){if(rem===0)return false;if(rem>0)hasValidQuota=true;}}return hasValidQuota;});if(targets.length&&confirm(`Activate ${targets.length} connections with >0% quota remaining?`)){await Promise.all(targets.map(e=>fetch(`/api/providers/${e.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({isActive:true})})));await tg()}else{setTimeout(()=>alert("No inactive connections with >0% quota remaining found"),300)}}catch(err){console.log(err)}finally{f(false)}}})},' +
         'tO=async e=>{';
     
     const injectedButtons = [
         `"codex"===${providerId}&&(0,i.jsx)(d.$n,{size:"sm",icon:"playlist_add",variant:"secondary",onClick:()=>J(!0),children:(0,w.Tl)("Bulk Add")}),`,
         '(0,i.jsx)(d.$n,{size:"sm",icon:"delete_forever",variant:"secondary",onClick:bulkDelete401,children:"Xóa 401/402"}),',
 
-        '(0,i.jsx)(d.$n,{size:"sm",icon:"block",variant:"secondary",onClick:bulkDeactivate0Weekly,children:"Tắt 0% token"}),',
-        '(0,i.jsx)(d.$n,{size:"sm",icon:"play_circle",variant:"secondary",onClick:bulkActivateWeekly,children:"Bật >0% Weekly"})'
+        '(0,i.jsx)(d.$n,{size:"sm",icon:"block",variant:"secondary",onClick:bulkDeactivate0Weekly,children:"Tắt 0% quota"}),',
+        '(0,i.jsx)(d.$n,{size:"sm",icon:"play_circle",variant:"secondary",onClick:bulkActivateWeekly,children:"Bật >0% quota"})'
     ].join('');
     
     const providerBoundFuncs = injectedFuncs.replaceAll('eR', modalSetter);
@@ -1004,12 +1415,13 @@ function patchQuotaPageSessionFilter() {
         'if(threshold==="all")return accounts;' +
         'let limit=Number(threshold);' +
         'return accounts.filter(e=>{' +
-        'let q=(quotaMap[e.id]?.quotas||[]).find(q=>q.name&&q.name.toLowerCase().includes(String(kind).toLowerCase()));' +
+        'let qList=(quotaMap[e.id]?.quotas||[]);' +
+        'let q=qList.find(q=>{let n=String(q.name||"").toLowerCase(),t=String(q.quotaType||"").toLowerCase();if(kind==="session")return t.includes("session")||n.includes("session")||n==="5h"||n.includes("(5h)");if(kind==="weekly")return t.includes("weekly")||n.includes("weekly");return n.includes(String(kind).toLowerCase());});' +
         'if(!q)return false;' +
         'let pct=null;' +
-        'if(q.remaining!==undefined)pct=Number(q.remaining);' +
-        'else if(q.remainingPercentage!==undefined)pct=Number(q.remainingPercentage);' +
-        'else if(q.total&&q.total>0)pct=(q.total-q.used)/q.total*100;' +
+        'if(q.remaining!==undefined&&q.remaining!==null)pct=Number(q.remaining);' +
+        'else if(q.remainingPercentage!==undefined&&q.remainingPercentage!==null)pct=Number(q.remainingPercentage);' +
+        'else if(q.total&&q.total>0)pct=(q.total-(q.used||0))/q.total*100;' +
         'if(!Number.isFinite(pct))return false;' +
         'pct=Math.max(0,Math.min(100,Math.round(pct)));' +
         'return pct>limit' +
@@ -1072,6 +1484,7 @@ function patchQuotaPageSessionFilter() {
 }
 
 // ============================================================
+// ============================================================
 // PATCH 8: Plan Badge on Quota Page
 // ============================================================
 function patchQuotaPlanBadge() {
@@ -1084,6 +1497,13 @@ function patchQuotaPlanBadge() {
     const file = path.join(dir, pageFile);
     let c = fs.readFileSync(file, 'utf8');
     
+    // If token badge was previously injected, strip it out cleanly
+    const tokenBadgeMatch = /,(?:\(\(\)=>{let tok=\(typeof __9rAccountTokens!=="undefined"&&__9rAccountTokens\)\?__9rAccountTokens\[r\.id\]:null;.*?children:"⚡ "\+f\(tok\.totalTokens\)\+" tok"}\)}\)\(\))/;
+    if (tokenBadgeMatch.test(c)) {
+        c = c.replace(tokenBadgeMatch, '');
+        fs.writeFileSync(file, c, 'utf8');
+    }
+
     if (c.includes('planBadge')) {
         console.log('  → Already patched');
         return true;
@@ -1356,14 +1776,18 @@ function patchBulkPriorityReassign() {
     c = c.replace(funcAnchor, priFuncs);
     
     // 3. Add button + modal in the toolbar
-    // Find end of bulk buttons to add priority button
-    const btnAnchor = 'children:"Bật >0% Weekly"})]})'
-    if (!c.includes(btnAnchor)) {
+    let btnAnchor = null;
+    if (c.includes('children:"Bật >0% quota"})]})')) {
+        btnAnchor = 'children:"Bật >0% quota"})]})';
+    } else if (c.includes('children:"Bật >0% Weekly"})]})')) {
+        btnAnchor = 'children:"Bật >0% Weekly"})]})';
+    }
+    if (!btnAnchor) {
         console.log('  ✗ btnAnchor not found');
         return false;
     }
     
-    const priButton = 'children:"Bật >0% Weekly"})]}),'+
+    const priButton = btnAnchor + ',' +
         `(0,a.jsxs)("button",{type:"button",onClick:()=>{setPriModalOpen(true);setPriResult(null)},disabled:${aliases.busy},` +
         'className:"flex h-8 shrink-0 items-center gap-1 rounded-lg border border-indigo-500/30 px-2 text-xs text-indigo-500 transition-colors hover:bg-indigo-500/10 disabled:opacity-50",' +
         'title:"Bulk reassign priority",' +
@@ -1439,7 +1863,7 @@ function patchSmartPrioritySort() {
         'let quotaPct=q=>{if(!q)return null;let pct=null;if(q.remaining!==undefined)pct=Number(q.remaining);else if(q.remainingPercentage!==undefined)pct=Number(q.remainingPercentage);else if(q.total&&q.total>0)pct=(q.total-q.used)/q.total*100;if(!Number.isFinite(pct))return null;return Math.max(0,Math.min(100,Math.round(pct)))};' +
         'let preferredPlan=normPlan(opts.preferredPlan||"all"),activationMode=opts.activationMode||"priority-only",sessionOrder=opts.sessionOrder==="asc"?"asc":"desc";' +
         'if(activationMode==="preferred-only"&&(preferredPlan==="all"||preferredPlan==="unknown"))throw Error("Select a specific preferred plan before changing activation status.");' +
-        'let rows=accounts.map(account=>{let plan=normPlan(quotaMap[account.id]?.plan);if(plan==="unknown")return null;let sessionQuota=(quotaMap[account.id]?.quotas||[]).find(q=>q.name&&q.name.toLowerCase().includes("session"));return{account,plan,sessionRemaining:quotaPct(sessionQuota)}}).filter(Boolean);' +
+        'let rows=accounts.map(account=>{let plan=normPlan(quotaMap[account.id]?.plan);if(plan==="unknown")return null;let sessionQuota=(quotaMap[account.id]?.quotas||[]).find(q=>{let n=String(q.name||"").toLowerCase(),t=String(q.quotaType||"").toLowerCase();return t.includes("session")||n.includes("session")||n==="5h"||n.includes("(5h)");});return{account,plan,sessionRemaining:quotaPct(sessionQuota)}}).filter(Boolean);' +
         'if(preferredPlan!=="all"&&!rows.some(row=>row.plan===preferredPlan))throw Error("The preferred plan is absent from the loaded population. Choose an available plan.");' +
         'let slots=rows.map(row=>row.account.priority);' +
         'if(!slots.every(Number.isInteger)||new Set(slots).size!==slots.length)throw Error("Smart Priority requires unique integer priority slots in the filtered accounts.");' +
@@ -1747,10 +2171,17 @@ function patchK12RotationEngine() {
         return true;
     }
 
-    // Injection point 1: Before require("./server.js") — engine functions
-    const requireAnchor = 'require("./server.js");';
-    if (!c.includes(requireAnchor)) {
-        console.log('  \u2717 require("./server.js") not found');
+    // Injection point 1: Before require("./server.js") or server startup — engine functions
+    let requireAnchor = null;
+    if (c.includes('require("./server.js");')) {
+        requireAnchor = 'require("./server.js");';
+    } else if (c.includes('const standalone = path.join(__dirname, "server.js");')) {
+        requireAnchor = 'const standalone = path.join(__dirname, "server.js");';
+    } else if (c.includes('if (require.main === module) {')) {
+        requireAnchor = 'if (require.main === module) {';
+    }
+    if (!requireAnchor) {
+        console.log('  ✗ server startup anchor not found in custom-server.js');
         return false;
     }
 
@@ -1773,8 +2204,8 @@ function patchK12RotationEngine() {
         '',
         '__k12_httpReq=function(method,reqPath,body){return new Promise(function(resolve,reject){var hdrs={"Content-Type":"application/json"};if(__k12_cliToken)hdrs["x-9r-cli-token"]=__k12_cliToken;var opts={hostname:"127.0.0.1",port:__k12_apiPort,path:reqPath,method:method,headers:hdrs};var r=__http.request(opts,function(res){var data="";res.on("data",function(ch){data+=ch});res.on("end",function(){try{resolve({status:res.statusCode,data:JSON.parse(data)})}catch(e){resolve({status:res.statusCode,data:null})}})});r.on("error",reject);r.setTimeout(15000,function(){r.destroy();reject(new Error("timeout"))});if(body)r.write(JSON.stringify(body));r.end()})};',
         '',
-        '__k12_isK12=function(acc){var plan=String((acc&&acc.providerSpecificData&&acc.providerSpecificData.chatgptPlanType)||(acc&&acc.plan)||"").toLowerCase().trim();var em=String(acc.email||acc.name||"").toLowerCase();return plan.indexOf("k12")>=0||em.indexOf("@yeutiengnhat.com.vn")>=0};',
-        '__k12_maskEmail=function(email){if(!email||typeof email!=="string")return email;var at=email.indexOf("@");if(at<0)return email;var user=email.substring(0,at),domain=email.substring(at+1);var uMask=user.length<=3?user:user.substring(0,3)+"***"+user.substring(user.length-2);var dots=domain.split(".");var dName=dots[0]||"";var dExt=dots.slice(1).join(".");var dMask=dName.length<=2?dName+"***":dName.substring(0,Math.min(2,dName.length))+"***";return uMask+"@"+dMask+(dExt?"."+dExt:"")};',
+        '__k12_isK12=function(acc){var plan=String((acc&&acc.providerSpecificData&&acc.providerSpecificData.chatgptPlanType)||(acc&&acc.plan)||"").toLowerCase().trim();var em=String(acc.email||acc.name||"").toLowerCase().trim();var k12Emails=["administrator@vip.yeutiengnhat.com.vn","chuongtrinh@vip.yeutiengnhat.com.vn","alenwhasington@hainguyen.net"];return plan.indexOf("k12")>=0||k12Emails.indexOf(em)>=0};',
+        '__k12_maskEmail=function(email){if(!email||typeof email!=="string")return email;var at=email.indexOf("@");if(at<0)return email;var user=email.substring(0,at),domain=email.substring(at+1);var m=domain.match(/(\\.(?:com|net|org|gov|edu|co)\\.[a-z]{2,})$/i)||domain.match(/(\\.[a-z]{2,})$/i);var tld=m?m[1]:"";var main=domain.slice(0,domain.length-tld.length);var p=main.replace(/[^a-zA-Z0-9]/g,"").slice(0,2)||main.slice(0,2);return user+"@"+p+"***"+tld};',
         '',
         '__k12_runRotation=function(){if(__k12_running||!__k12_state.enabled)return;__k12_running=true;(async function(){try{',
         '  var allAcc=[],pg=1,tp=1;while(pg<=tp){var resp=await __k12_httpReq("GET","/api/providers/client?pageSize=500&accountStatus=all&page="+pg);if(!resp||resp.status!==200||!resp.data)break;var batch=Array.isArray(resp.data.connections)?resp.data.connections:[];allAcc=allAcc.concat(batch);var pag=resp.data.pagination||{};tp=Number(pag.totalPages)||pg;if(batch.length===0)break;pg++}',
@@ -1839,45 +2270,40 @@ function patchK12RotationEngine() {
 }
 
 // ============================================================
-// PATCH 28: Route Sol/Terra to dedicated Codex account tiers
+// PATCH 28: Restore the upstream account selector after retiring tier routing
 // ============================================================
-function patchModelAccountTierRouting() {
-    console.log('[PATCH 28] Model-to-account tier routing');
+function patchDefaultAccountRouting() {
+    console.log('[PATCH 28] Default Account Routing');
 
     const chunksDir = path.join(BUILD, 'server/chunks');
     if (!fs.existsSync(chunksDir)) { console.log('  ✗ Server chunks dir not found'); return false; }
 
-    const matches = [];
+    const changedChunks = [];
     for (const name of fs.readdirSync(chunksDir).filter(name => name.endsWith('.js'))) {
         const file = path.join(chunksDir, name);
         const content = fs.readFileSync(file, 'utf8');
         let result;
         try {
-            result = patchCredentialSelectorContent(content);
+            result = removeInjectedTierFilters(content);
         } catch (error) {
             console.log(`  ✗ ${name}: ${error.message}`);
             return false;
         }
-        if (result.matched) matches.push({ file, name, ...result });
+        if (INJECTED_TIER_MARKERS.some(marker => result.content.includes(marker))) {
+            console.log(`  ✗ ${name}: injected tier marker remains after cleanup`);
+            return false;
+        }
+        if (result.changed) changedChunks.push({ file, name, content: result.content });
     }
 
-    if (matches.length !== 1) {
-        console.log(`  ✗ Expected one credential selector chunk, found ${matches.length}`);
-        return false;
+    for (const chunk of changedChunks) {
+        fs.writeFileSync(chunk.file, chunk.content, 'utf8');
     }
-
-    const target = matches[0];
-    if (!target.content.includes(MODEL_ACCOUNT_TIER_MARKER)) {
-        console.log('  ✗ Patched selector marker is missing');
-        return false;
-    }
-    if (!target.changed) {
-        console.log(`  → Already patched in ${target.name}`);
+    if (0 === changedChunks.length) {
+        console.log('  → No legacy tier filters found; upstream account selection is unchanged');
         return true;
     }
-
-    fs.writeFileSync(target.file, target.content, 'utf8');
-    console.log(`  ✅ Enforced v3: Sol=Plus+ fail-closed and Terra=Free/Go/K12/Edu preferred in ${target.name}`);
+    console.log(`  ✅ Removed legacy tier filters from ${changedChunks.map(chunk => chunk.name).join(', ')}; upstream account selection restored`);
     return true;
 }
 
@@ -2155,8 +2581,10 @@ function patchQuotaLargeListPerformance() {
     const aliases = getQuotaBundleAliases(c);
     const readyMarkers = [
         'async function __9rRunQuotaPool(e,t,r=8)',
+        'async function __9rFetchAccountTokens(setter)',
         `__9rQuotaGeneration=(0,${aliases.react}.useRef)(0)`,
-        'async(e,t,__9rBatch)=>',
+        `[__9rAccountTokens,__9rSetAccountTokens]=(0,${aliases.react}.useState)({})`,
+        'async(e,t,__9rBatch',
         '__9rFetchQuotaBatch=',
         'for(let r=0;r<e.length;r+=24)',
         '__9rQueueQuotaCache(i.quotas)',
@@ -2175,7 +2603,6 @@ function patchQuotaLargeListPerformance() {
     const badMarkers = [
         'await Promise.all(a.filter(',
         `await Promise.all(e.map(e=>${aliases.fetchQuota}(e.id,e.provider)))`,
-        'let r=await fetch(`/api/usage/${e}`);',
         'disabled:d||b',
     ];
     if (readyMarkers.every(marker => c.includes(marker)) && badMarkers.every(marker => !c.includes(marker))) {
@@ -2195,7 +2622,8 @@ function patchQuotaLargeListPerformance() {
     const helperAnchor = 'async function b(e,t){return await e(t)}';
     const helperCode = helperAnchor +
         'async function __9rRunQuotaPool(e,t,r=8){let a=0;await Promise.all(Array.from({length:Math.min(r,e.length)},async()=>{for(;;){let r=a++;if(r>=e.length)return;await t(e[r],r)}}))}' +
-        'function __9rYield(){return new Promise(e=>setTimeout(e,0))}';
+        'function __9rYield(){return new Promise(e=>setTimeout(e,0))}' +
+        'async function __9rFetchAccountTokens(setter){try{let r=await fetch("/api/usage/stats",{cache:"no-store"});if(r.ok){let d=await r.json(),m={};for(let x of Object.values(d?.byAccount||{})){if(x?.connectionId){m[x.connectionId]||(m[x.connectionId]={promptTokens:0,completionTokens:0,totalTokens:0,requests:0,cost:0});m[x.connectionId].promptTokens+=x.promptTokens||0;m[x.connectionId].completionTokens+=x.completionTokens||0;m[x.connectionId].totalTokens+=(x.promptTokens||0)+(x.completionTokens||0);m[x.connectionId].requests+=x.requests||0;m[x.connectionId].cost+=x.cost||0}}setter(m)}}catch(_){}}';
     ensure('async function __9rRunQuotaPool(e,t,r=8)', helperAnchor, helperCode, 'quota worker helper');
 
     if (!c.includes('__9rQuotaCacheTimer')) {
@@ -2209,27 +2637,56 @@ function patchQuotaLargeListPerformance() {
     ensure(
         `__9rQuotaGeneration=(0,${aliases.react}.useRef)(0)`,
         `${aliases.generationRef}=(0,${aliases.react}.useRef)(0),${aliases.fetchAccounts}=`,
-        `${aliases.generationRef}=(0,${aliases.react}.useRef)(0),__9rQuotaGeneration=(0,${aliases.react}.useRef)(0),${aliases.fetchAccounts}=`,
+        `${aliases.generationRef}=(0,${aliases.react}.useRef)(0),__9rQuotaGeneration=(0,${aliases.react}.useRef)(0),[__9rAccountTokens,__9rSetAccountTokens]=(0,${aliases.react}.useState)({}),${aliases.fetchAccounts}=`,
         'quota generation ref',
     );
-    ensure(
-        'async(e,t,__9rBatch)=>',
-        `${aliases.fetchQuota}=(0,${aliases.react}.useCallback)(async(e,t)=>{${aliases.loadingSetter}(t=>({...t,[e]:!0})),${aliases.errorSetter}(t=>({...t,[e]:null}));try{console.log(`,
-        `${aliases.fetchQuota}=(0,${aliases.react}.useCallback)(async(e,t,__9rBatch)=>{__9rBatch?(__9rBatch.loading[e]=!0,__9rBatch.errors[e]=null):(${aliases.loadingSetter}(t=>({...t,[e]:!0})),${aliases.errorSetter}(t=>({...t,[e]:null})));try{__9rBatch||console.log(`,
-        'quota fetch batch signature',
-    );
-    ensure('__9rBatch||console.log(`[ProviderLimits] Got quota', 'console.log(`[ProviderLimits] Got quota for ${t}:`,a);', '__9rBatch||console.log(`[ProviderLimits] Got quota for ${t}:`,a);', 'quota success log');
-    ensure('__9rBatch?__9rBatch.quotas[e]=r:', `${aliases.quotaSetter}(t=>({...t,[e]:r})),f(e,r);return`, `__9rBatch?__9rBatch.quotas[e]=r:(${aliases.quotaSetter}(t=>({...t,[e]:r})),f(e,r));return`, 'quota auth result');
-    ensure(`__9rBatch?__9rBatch.quotas[e]=${aliases.successValue}:`, `${aliases.quotaSetter}(t=>({...t,[e]:${aliases.successValue}})),f(e,${aliases.successValue})`, `__9rBatch?__9rBatch.quotas[e]=${aliases.successValue}:(${aliases.quotaSetter}(t=>({...t,[e]:${aliases.successValue}})),f(e,${aliases.successValue}))`, 'quota success state');
-    ensure('__9rBatch?__9rBatch.errors[e]=', `${aliases.errorSetter}(t=>({...t,[e]:r.message||"Failed to fetch quota"}))`, `__9rBatch?__9rBatch.errors[e]=r.message||"Failed to fetch quota":${aliases.errorSetter}(t=>({...t,[e]:r.message||"Failed to fetch quota"}))`, 'quota error state');
-    ensure('__9rBatch?__9rBatch.loading[e]=!1:', `${aliases.loadingSetter}(t=>({...t,[e]:!1}))`, `__9rBatch?__9rBatch.loading[e]=!1:${aliases.loadingSetter}(t=>({...t,[e]:!1}))`, 'quota loading completion');
 
-    const oldUsageFetch = 'let r=await fetch(`/api/usage/${e}`);';
-    const timedUsageFetch = 'let __9rUsageController=new AbortController,__9rUsageTimeout=setTimeout(()=>__9rUsageController.abort(),3e4),r;try{r=await fetch(`/api/usage/${e}`,{signal:__9rUsageController.signal})}finally{clearTimeout(__9rUsageTimeout)};';
-    ensure('__9rUsageTimeout=setTimeout(', oldUsageFetch, timedUsageFetch, 'quota usage timeout');
+    let fetchAnchor = null;
+    let fetchReplacement = null;
+    const fetchAnchor55 = `${aliases.fetchQuota}=(0,${aliases.react}.useCallback)(async(e,t,{force:r=!1}={})=>{${aliases.loadingSetter}(t=>({...t,[e]:!0})),${aliases.errorSetter}(t=>({...t,[e]:null}));try{console.log(`;
+    const fetchAnchor50 = `${aliases.fetchQuota}=(0,${aliases.react}.useCallback)(async(e,t)=>{${aliases.loadingSetter}(t=>({...t,[e]:!0})),${aliases.errorSetter}(t=>({...t,[e]:null}));try{console.log(`;
+    if (c.includes(fetchAnchor55)) {
+        fetchAnchor = fetchAnchor55;
+        fetchReplacement = `${aliases.fetchQuota}=(0,${aliases.react}.useCallback)(async(e,t,__9rBatch,{force:r=!1}={})=>{(__9rBatch&&__9rBatch.loading)?(__9rBatch.loading[e]=!0,__9rBatch.errors[e]=null):(${aliases.loadingSetter}(t=>({...t,[e]:!0})),${aliases.errorSetter}(t=>({...t,[e]:null})));try{__9rBatch||console.log(`;
+    } else if (c.includes(fetchAnchor50)) {
+        fetchAnchor = fetchAnchor50;
+        fetchReplacement = `${aliases.fetchQuota}=(0,${aliases.react}.useCallback)(async(e,t,__9rBatch)=>{(__9rBatch&&__9rBatch.loading)?(__9rBatch.loading[e]=!0,__9rBatch.errors[e]=null):(${aliases.loadingSetter}(t=>({...t,[e]:!0})),${aliases.errorSetter}(t=>({...t,[e]:null})));try{__9rBatch||console.log(`;
+    }
+    if (fetchAnchor) ensure('async(e,t,__9rBatch', fetchAnchor, fetchReplacement, 'quota fetch batch signature');
+
+    ensure('__9rBatch||console.log(`[ProviderLimits] Got quota', c.includes(',s);') ? 'console.log(`[ProviderLimits] Got quota for ${t}:`,s);' : 'console.log(`[ProviderLimits] Got quota for ${t}:`,a);', c.includes(',s);') ? '__9rBatch||console.log(`[ProviderLimits] Got quota for ${t}:`,s);' : '__9rBatch||console.log(`[ProviderLimits] Got quota for ${t}:`,a);', 'quota success log');
+
+    const authSetter55 = `${aliases.quotaSetter}(t=>({...t,[e]:a})),f(e,a);return`;
+    const authSetter50 = `${aliases.quotaSetter}(t=>({...t,[e]:r})),f(e,r);return`;
+    if (c.includes(authSetter55)) {
+        ensure('__9rBatch?(__9rBatch.quotas[e]=a):', authSetter55, `(__9rBatch&&__9rBatch.quotas)?(__9rBatch.quotas[e]=a):(${aliases.quotaSetter}(t=>({...t,[e]:a})),f(e,a));return`, 'quota auth result');
+    } else if (c.includes(authSetter50)) {
+        ensure('__9rBatch?(__9rBatch.quotas[e]=r):', authSetter50, `(__9rBatch&&__9rBatch.quotas)?(__9rBatch.quotas[e]=r):(${aliases.quotaSetter}(t=>({...t,[e]:r})),f(e,r));return`, 'quota auth result');
+    }
+
+    const successSetter55 = `${aliases.quotaSetter}(t=>({...t,[e]:l})),f(e,l)`;
+    const successSetter50 = `${aliases.quotaSetter}(t=>({...t,[e]:i})),f(e,i)`;
+    if (c.includes(successSetter55)) {
+        ensure('__9rBatch?(__9rBatch.quotas[e]=l):', successSetter55, `(__9rBatch&&__9rBatch.quotas)?(__9rBatch.quotas[e]=l):(${aliases.quotaSetter}(t=>({...t,[e]:l})),f(e,l))`, 'quota success state');
+    } else if (c.includes(successSetter50)) {
+        ensure('__9rBatch?(__9rBatch.quotas[e]=i):', successSetter50, `(__9rBatch&&__9rBatch.quotas)?(__9rBatch.quotas[e]=i):(${aliases.quotaSetter}(t=>({...t,[e]:i})),f(e,i))`, 'quota success state');
+    }
+
+    ensure('__9rBatch?(__9rBatch.errors[e]=', `${aliases.errorSetter}(t=>({...t,[e]:r.message||"Failed to fetch quota"}))`, `(__9rBatch&&__9rBatch.errors)?(__9rBatch.errors[e]=r.message||"Failed to fetch quota"):${aliases.errorSetter}(t=>({...t,[e]:r.message||"Failed to fetch quota"}))`, 'quota error state');
+    ensure('__9rBatch?(__9rBatch.loading[e]=!1):', `${aliases.loadingSetter}(t=>({...t,[e]:!1}))`, `(__9rBatch&&__9rBatch.loading)?(__9rBatch.loading[e]=!1):${aliases.loadingSetter}(t=>({...t,[e]:!1}))`, 'quota loading completion');
+
+    if (!c.includes('__9rUsageTimeout=setTimeout(')) {
+        if (c.includes('let a=`/api/usage/${e}${r?"?force=1":""}`,i=await fetch(a);')) {
+            const timedUsageFetch = 'let __9rUsageController=new AbortController,__9rUsageTimeout=setTimeout(()=>__9rUsageController.abort(),3e4),a=`/api/usage/${e}${r?"?force=1":""}`,i;try{i=await fetch(a,{signal:__9rUsageController.signal})}finally{clearTimeout(__9rUsageTimeout)};';
+            c = c.replace('let a=`/api/usage/${e}${r?"?force=1":""}`,i=await fetch(a);', timedUsageFetch);
+        } else if (c.includes('let r=await fetch(`/api/usage/${e}`);')) {
+            const timedUsageFetch = 'let __9rUsageController=new AbortController,__9rUsageTimeout=setTimeout(()=>__9rUsageController.abort(),3e4),r;try{r=await fetch(`/api/usage/${e}`,{signal:__9rUsageController.signal})}finally{clearTimeout(__9rUsageTimeout)};';
+            c = c.replace('let r=await fetch(`/api/usage/${e}`);', timedUsageFetch);
+        }
+    }
 
     const batchAnchor = `},[]),${aliases.afterCallback}=`;
-    const batchHelper = `},[]),__9rFetchQuotaBatch=(0,${aliases.react}.useCallback)(async(e)=>{let t=++__9rQuotaGeneration.current;for(let r=0;r<e.length;r+=24){if(t!==__9rQuotaGeneration.current)return;let a=e.slice(r,r+24),i={loading:{},errors:{},quotas:{}};await __9rRunQuotaPool(a,e=>t===__9rQuotaGeneration.current?${aliases.fetchQuota}(e.id,e.provider,i):Promise.resolve());if(t!==__9rQuotaGeneration.current)return;__9rQueueQuotaCache(i.quotas);let l=()=>{${aliases.loadingSetter}(e=>({...e,...i.loading})),${aliases.errorSetter}(e=>({...e,...i.errors})),${aliases.quotaSetter}(e=>({...e,...i.quotas}))};"function"==typeof ${aliases.react}.startTransition?(0,${aliases.react}.startTransition)(l):l();await __9rYield()}},[${aliases.fetchQuota}]),${aliases.afterCallback}=`;
+    const batchHelper = `},[]),__9rFetchQuotaBatch=(0,${aliases.react}.useCallback)(async(e)=>{let t=++__9rQuotaGeneration.current;for(let r=0;r<e.length;r+=24){if(t!==__9rQuotaGeneration.current)return;let a=e.slice(r,r+24),i={loading:{},errors:{},quotas:{}};await __9rRunQuotaPool(a,e=>t===__9rQuotaGeneration.current?${aliases.fetchQuota}(e.id,e.provider,i):Promise.resolve());if(t!==__9rQuotaGeneration.current)return;__9rQueueQuotaCache(i.quotas);let l=()=>{${aliases.loadingSetter}(e=>({...e,...i.loading})),${aliases.errorSetter}(e=>({...e,...i.errors})),${aliases.quotaSetter}(e=>({...e,...i.quotas}))};"function"==typeof ${aliases.react}.startTransition?(0,${aliases.react}.startTransition)(l):l();await __9rYield()}__9rFetchAccountTokens(__9rSetAccountTokens)},[${aliases.fetchQuota}]),${aliases.afterCallback}=`;
     ensure('__9rFetchQuotaBatch=', batchAnchor, batchHelper, 'quota batch callback');
 
     ensure(
@@ -2265,6 +2722,7 @@ function patchQuotaLargeListPerformance() {
     const oldInitialEffect = `(0,${aliases.react}.useEffect)(()=>{(async()=>{${aliases.initialLoadingSetter}(!0);let e=await ${aliases.fetchAccounts}(${aliases.page});${aliases.initialLoadingSetter}(!1),${aliases.errorSetter}(t=>p(t,e)),${aliases.quotaSetter}(t=>p(t,e)),await __9rFetchQuotaBatch(e),${aliases.lastRefreshSetter}(new Date)})()},[${aliases.fetchAccounts},${aliases.fetchQuota},${aliases.page}])`;
     const guardedInitialEffect = `(0,${aliases.react}.useEffect)(()=>{(async()=>{${aliases.refreshBusySetter}(!0),${aliases.initialLoadingSetter}(!0);try{let e=await ${aliases.fetchAccounts}(${aliases.page});${aliases.initialLoadingSetter}(!1),${aliases.errorSetter}(t=>p(t,e)),${aliases.quotaSetter}(t=>p(t,e)),await __9rFetchQuotaBatch(e),${aliases.lastRefreshSetter}(new Date)}finally{${aliases.refreshBusySetter}(!1)}})()},[${aliases.fetchAccounts},__9rFetchQuotaBatch,${aliases.page}])`;
     ensure(`${aliases.refreshBusySetter}(!0),${aliases.initialLoadingSetter}(!0);try{`, oldInitialEffect, guardedInitialEffect, 'quota initial refresh guard');
+
 
     if (!readyMarkers.every(marker => c.includes(marker)) || badMarkers.some(marker => c.includes(marker))) {
         console.log('  ✗ Large-list performance validation failed');
@@ -2332,54 +2790,97 @@ function patchResponsiveCardHeader() {
 }
 
 // ============================================================
-// PATCH 26: Quota Card Email Masking
+// PATCH 26: Quota Card Email Masking & Copy Button
 // ============================================================
 function patchQuotaCardEmailMasking() {
-    console.log('[PATCH 26] Quota Card Email Masking');
+    console.log('[PATCH 26] Quota Card Email Masking & Copy Button');
     const dir = path.join(BUILD, 'static/chunks/app/(dashboard)/dashboard/quota');
-    if (!fs.existsSync(dir)) { console.log('  \u2717 Dir not found'); return false; }
+    if (!fs.existsSync(dir)) { console.log('  ✗ Dir not found'); return false; }
     const pageFile = fs.readdirSync(dir).find(f => f.startsWith('page-') && f.endsWith('.js'));
-    if (!pageFile) { console.log('  \u2717 File not found'); return false; }
+    if (!pageFile) { console.log('  ✗ File not found'); return false; }
 
     const file = path.join(dir, pageFile);
     let c = fs.readFileSync(file, 'utf8');
 
-    if (c.includes('__9rMaskEmail')) {
-        console.log('  \u2192 Already patched');
+    const maskFn = 'var __9rMaskEmail=function(s){if(!s||typeof s!=="string")return s;var at=s.indexOf("@");if(at<0)return s;var u=s.substring(0,at),d=s.substring(at+1);var m=d.match(/(\\.(?:com|net|org|gov|edu|co)\\.[a-z]{2,})$/i)||d.match(/(\\.[a-z]{2,})$/i);var tld=m?m[1]:"";var main=d.slice(0,d.length-tld.length);var p=main.replace(/[^a-zA-Z0-9]/g,"").slice(0,2)||main.slice(0,2);return u+"@"+p+"***"+tld};';
+
+    let modified = false;
+
+    if (!c.includes('__9rMaskEmail')) {
+        const xPattern = /function ([A-Za-z0-9_$]+)\(([A-Za-z0-9_$]+)\)\{return \2\.name\?\.trim\(\)\|\|\2\.email\?\.trim\(\)\|\|\2\.displayName\?\.trim\(\)\|\|null\}/;
+        const matchX = c.match(xPattern);
+        if (!matchX) {
+            console.log('  ✗ Name getter getter x(e) not found');
+            return false;
+        }
+
+        const dPattern = /function ([A-Za-z0-9_$]+)\(([A-Za-z0-9_$]+)\)\{return \2\.name\?\.trim\(\)&&\2\.email\?\.trim\(\)&&\2\.name\.trim\(\)!==\2\.email\.trim\(\)\?\2\.email\.trim\(\):\2\.name\?\.trim\(\)&&\2\.displayName\?\.trim\(\)&&\2\.name\.trim\(\)!==\2\.displayName\.trim\(\)\?\2\.displayName\.trim\(\):null\}/;
+        const matchD = c.match(dPattern);
+
+        const newX = maskFn + 'function ' + matchX[1] + '(' + matchX[2] + '){return __9rMaskEmail(' + matchX[2] + '.name?.trim()||' + matchX[2] + '.email?.trim()||' + matchX[2] + '.displayName?.trim()||null)}';
+
+        c = c.replace(matchX[0], newX);
+
+        if (matchD) {
+            const newD = 'function ' + matchD[1] + '(' + matchD[2] + '){return __9rMaskEmail(' + matchD[2] + '.name?.trim()&&' + matchD[2] + '.email?.trim()&&' + matchD[2] + '.name.trim()!==' + matchD[2] + '.email.trim()?' + matchD[2] + '.email.trim():' + matchD[2] + '.name?.trim()&&' + matchD[2] + '.displayName?.trim()&&' + matchD[2] + '.name.trim()!==' + matchD[2] + '.displayName.trim()?' + matchD[2] + '.displayName.trim():null)}';
+            c = c.replace(matchD[0], newD);
+        }
+        modified = true;
+    } else {
+        const oldMaskFnPattern = /var __9rMaskEmail=function\(s\)\{.+?\};/;
+        if (oldMaskFnPattern.test(c)) {
+            c = c.replace(oldMaskFnPattern, maskFn);
+        }
+    }
+
+    // Add Copy Button next to x(r) and D(r)
+    const badCopy1 = 'children:(0,a.jsx)("span",{className:"material-symbols-outlined text-[13px] leading-none",children:"content_copy"})]}):null';
+    const badCopy2 = 'children:(0,a.jsx)("span",{className:"material-symbols-outlined text-[12px] leading-none",children:"content_copy"})]}):null';
+    if (c.includes(badCopy1)) {
+        c = c.replace(badCopy1, 'children:(0,a.jsx)("span",{className:"material-symbols-outlined text-[13px] leading-none",children:"content_copy"})})]}):null');
+        modified = true;
+    }
+    if (c.includes(badCopy2)) {
+        c = c.replace(badCopy2, 'children:(0,a.jsx)("span",{className:"material-symbols-outlined text-[12px] leading-none",children:"content_copy"})})]}):null');
+        modified = true;
+    }
+
+    const copyTarget = 'x(r)?(0,a.jsx)("p",{className:"text-xs text-text-muted truncate",children:x(r)}):null';
+    const copyReplacement = 'x(r)?(0,a.jsxs)("div",{className:"flex items-center gap-1 min-w-0 group/copy",children:[(0,a.jsx)("p",{className:"text-xs text-text-muted truncate",children:x(r)}),(0,a.jsx)("button",{type:"button",onClick:e=>{e.stopPropagation();let raw=r.email?.trim()||r.name?.trim()||r.displayName?.trim()||"";if(raw){navigator.clipboard.writeText(raw);let icon=e.currentTarget.querySelector(".material-symbols-outlined");if(icon){icon.textContent="check";e.currentTarget.classList.add("text-emerald-500");setTimeout(()=>{icon.textContent="content_copy";e.currentTarget.classList.remove("text-emerald-500")},1500)}}},className:"shrink-0 p-0.5 text-text-muted/50 hover:text-text-primary transition-colors cursor-pointer",title:"Copy full email",children:(0,a.jsx)("span",{className:"material-symbols-outlined text-[13px] leading-none",children:"content_copy"})})]}):null';
+
+    if (c.includes(copyTarget)) {
+        c = c.replace(copyTarget, copyReplacement);
+        modified = true;
+    }
+
+    const copyTargetD = 'D(r)?(0,a.jsx)("p",{className:"text-[11px] text-text-muted/80 truncate",children:D(r)}):null';
+    const copyReplacementD = 'D(r)?(0,a.jsxs)("div",{className:"flex items-center gap-1 min-w-0 group/copy",children:[(0,a.jsx)("p",{className:"text-[11px] text-text-muted/80 truncate",children:D(r)}),(0,a.jsx)("button",{type:"button",onClick:e=>{e.stopPropagation();let raw=r.email?.trim()||r.displayName?.trim()||r.name?.trim()||"";if(raw){navigator.clipboard.writeText(raw);let icon=e.currentTarget.querySelector(".material-symbols-outlined");if(icon){icon.textContent="check";e.currentTarget.classList.add("text-emerald-500");setTimeout(()=>{icon.textContent="content_copy";e.currentTarget.classList.remove("text-emerald-500")},1500)}}},className:"shrink-0 p-0.5 text-text-muted/50 hover:text-text-primary transition-colors cursor-pointer",title:"Copy email",children:(0,a.jsx)("span",{className:"material-symbols-outlined text-[12px] leading-none",children:"content_copy"})})]}):null';
+
+    if (c.includes(copyTargetD)) {
+        c = c.replace(copyTargetD, copyReplacementD);
+        modified = true;
+    }
+
+    if (modified) {
+        fs.writeFileSync(file, c, 'utf8');
+        console.log('  ✅ Masked card email/name and added copy button on Quota page');
         return true;
     }
 
-    const xPattern = /function ([A-Za-z0-9_$]+)\(([A-Za-z0-9_$]+)\)\{return \2\.name\?\.trim\(\)\|\|\2\.email\?\.trim\(\)\|\|\2\.displayName\?\.trim\(\)\|\|null\}/;
-    const matchX = c.match(xPattern);
-    if (!matchX) {
-        console.log('  \u2717 Name getter getter x(e) not found');
-        return false;
+    if (c.includes('content_copy') && c.includes('__9rMaskEmail')) {
+        console.log('  → Already patched');
+        return true;
     }
 
-    const dPattern = /function ([A-Za-z0-9_$]+)\(([A-Za-z0-9_$]+)\)\{return \2\.name\?\.trim\(\)&&\2\.email\?\.trim\(\)&&\2\.name\.trim\(\)!==\2\.email\.trim\(\)\?\2\.email\.trim\(\):\2\.name\?\.trim\(\)&&\2\.displayName\?\.trim\(\)&&\2\.name\.trim\(\)!==\2\.displayName\.trim\(\)\?\2\.displayName\.trim\(\):null\}/;
-    const matchD = c.match(dPattern);
-
-    const maskFn = 'var __9rMaskEmail=function(s){if(!s||typeof s!=="string")return s;var at=s.indexOf("@");if(at<0)return s;var u=s.substring(0,at),d=s.substring(at+1);var uM=u.length<=3?u:u.substring(0,3)+"***"+u.substring(u.length-2);var parts=d.split(".");var dN=parts[0]||"",dExt=parts.slice(1).join(".");var dM=dN.length<=2?dN+"***":dN.substring(0,Math.min(2,dN.length))+"***";return uM+"@"+dM+(dExt?"."+dExt:"")};';
-
-    const newX = maskFn + 'function ' + matchX[1] + '(' + matchX[2] + '){return __9rMaskEmail(' + matchX[2] + '.name?.trim()||' + matchX[2] + '.email?.trim()||' + matchX[2] + '.displayName?.trim()||null)}';
-
-    c = c.replace(matchX[0], newX);
-
-    if (matchD) {
-        const newD = 'function ' + matchD[1] + '(' + matchD[2] + '){return __9rMaskEmail(' + matchD[2] + '.name?.trim()&&' + matchD[2] + '.email?.trim()&&' + matchD[2] + '.name.trim()!==' + matchD[2] + '.email.trim()?' + matchD[2] + '.email.trim():' + matchD[2] + '.name?.trim()&&' + matchD[2] + '.displayName?.trim()&&' + matchD[2] + '.name.trim()!==' + matchD[2] + '.displayName.trim()?' + matchD[2] + '.displayName.trim():null)}';
-        c = c.replace(matchD[0], newD);
-    }
-
-    fs.writeFileSync(file, c, 'utf8');
-    console.log('  \u2705 Masked card email/name displays on Quota page');
-    return true;
+    console.log('  ✗ Quota email copy button target not found');
+    return false;
 }
 
 // ============================================================
-// PATCH 27: Compact quota-row layout
+// PATCH 27: Cycle/Window Tokens & Quota Row Layout
 // ============================================================
 function patchQuotaRowLayout() {
-    console.log('[PATCH 27] Compact quota-row layout');
+    console.log('[PATCH 27] Cycle/Window Tokens & Quota Row Layout');
 
     const dir = path.join(BUILD, 'static/chunks/app/(dashboard)/dashboard/quota');
     if (!fs.existsSync(dir)) { console.log('  ✗ Dir not found'); return false; }
@@ -2388,23 +2889,69 @@ function patchQuotaRowLayout() {
 
     const file = path.join(dir, pageFile);
     let c = fs.readFileSync(file, 'utf8');
+
+    let modified = false;
+
+    // 1. Compact width for label column
     const original = 'className:"flex w-36 min-w-0 items-center gap-1.5"';
     const compact = 'className:"flex min-w-0 items-center gap-1.5",style:{width:"clamp(4.5rem,32%,9rem)"}';
+    if (c.includes(original)) {
+        c = c.replace(original, compact);
+        modified = true;
+    }
 
-    if (c.includes(compact)) {
+    // 2. Attach connectionId to card quotas
+    if (c.includes('g=o?.quotas||[]')) {
+        c = c.replace('g=o?.quotas||[]', 'g=(o?.quotas||[]).map(q=>({...q,connectionId:r.id}))');
+        modified = true;
+    }
+
+    // 3. Preserve windowSeconds in Codex quota transformer
+    const codexOrig = 'case"codex":t.quotas&&Object.entries(t.quotas).forEach(([e,t])=>{r.push({name:e,used:t.used||0,total:t.total||0,remaining:t.remaining,resetAt:t.resetAt||null})});break;';
+    const codexNew = 'case"codex":t.quotas&&Object.entries(t.quotas).forEach(([e,t])=>{r.push({name:e,used:t.used||0,total:t.total||0,remaining:t.remaining,resetAt:t.resetAt||null,windowSeconds:t.windowSeconds})});break;';
+    if (c.includes(codexOrig)) {
+        c = c.replace(codexOrig, codexNew);
+        modified = true;
+    }
+
+    // 4. Format Quota Name (Session Window, Weekly Window, Code Review)
+    const nameOrig = 'children:e.name})]';
+    const nameNew = 'children:e.name==="session"?"Session Window":e.name==="weekly"?"Weekly Window":e.name==="review"||e.name==="code_review"?"Code Review":e.name})]';
+    if (c.includes(nameOrig)) {
+        c = c.replace(nameOrig, nameNew);
+        modified = true;
+    }
+
+    // 5. Format Subline (Tokens: used / total, Window: Xh Ym, % remaining)
+    const sublineOrig = 'children:[(0,a.jsxs)("span",{className:"text-text-muted truncate",title:`${e.used.toLocaleString()} / ${e.total>0?e.total.toLocaleString():"∞"}`,children:[e.used.toLocaleString()," / ",e.total>0?e.total.toLocaleString():"∞"]}),(0,a.jsxs)("span",{className:`font-medium ${i.text} shrink-0`,children:[e.remaining,"%"]})]';
+    const sublineNew = 'children:(()=>{' +
+        'let fTok=n=>n>=1e9?(n/1e9).toFixed(2)+"B":n>=1e6?(n/1e6).toFixed(2)+"M":n>=1e3?(n/1e3).toFixed(1)+"k":String(n);' +
+        'let tokData=(typeof __9rAccountTokens!=="undefined"&&__9rAccountTokens)?__9rAccountTokens[e.connectionId]:null;' +
+        'let uTok=e.usedTokens||tokData?.totalTokens||0;' +
+        'let tokLabel=(uTok>0&&e.used>0)?"Tokens: "+fTok(uTok)+" / "+fTok(e.totalTokens||Math.round(uTok/(e.used/100))):"Used: "+(e.used!==void 0?e.used+"%":"100%");' +
+        'let winLabel=e.windowSeconds?"Window: "+Math.floor(e.windowSeconds/3600)+"h "+Math.floor((e.windowSeconds%3600)/60)+"m":null;' +
+        'return [(0,a.jsx)("span",{className:"text-red-500/90 dark:text-red-400 font-medium truncate",children:tokLabel}),' +
+        'winLabel&&(0,a.jsx)("span",{className:"text-text-muted/80 text-[10px] hidden md:inline truncate",children:winLabel}),' +
+        '(0,a.jsxs)("span",{className:`font-medium ${i.text} shrink-0`,children:[e.remaining,"%"]})]' +
+        '})()';
+    if (c.includes(sublineOrig)) {
+        c = c.replace(sublineOrig, sublineNew);
+        modified = true;
+    }
+
+    if (modified) {
+        fs.writeFileSync(file, c, 'utf8');
+        console.log('  ✅ Applied cycle/window tokens and layout to Quota page');
+        return true;
+    }
+
+    if (c.includes(compact) && c.includes('Session Window')) {
         console.log('  → Already patched');
         return true;
     }
-    if (!c.includes(original)) {
-        console.log('  ✗ Quota-row label layout not found');
-        return false;
-    }
 
-    // Do not reserve 144px for a short quota name on narrow cards.
-    c = c.replace(original, compact);
-    fs.writeFileSync(file, c, 'utf8');
-    console.log('  ✅ Made session/weekly rows fit compact cards');
-    return true;
+    console.log('  ✗ Quota-row layout target patterns not found');
+    return false;
 }
 
 // ============================================================
@@ -2678,14 +3225,72 @@ function patchServerSsrBypass() {
 }
 
 // ============================================================
+// PATCH 29: Codex Usage Window Normalization (Session + Weekly)
+// ============================================================
+function patchCodexUsageWindows() {
+    console.log('[PATCH 29] Codex Usage Window Normalization (Session + Weekly)');
+
+    const chunksDir = path.join(BUILD, 'server/chunks');
+    if (!fs.existsSync(chunksDir)) { console.log('  ✗ Server chunks dir not found'); return false; }
+    
+    const candidates = fs.readdirSync(chunksDir)
+        .filter(file => file.endsWith('.js'))
+        .map(file => path.join(chunksDir, file))
+        .filter(file => {
+            const content = fs.readFileSync(file, 'utf8');
+            return content.includes('function j(a,b,c){') &&
+                content.includes('d.primary_window||d.primary') &&
+                content.includes('d.secondary_window||d.secondary');
+        });
+
+    if (candidates.length === 0) {
+        console.log('  ✗ No matching chunk found for Codex usage windows');
+        return false;
+    }
+
+    let patchedCount = 0;
+    for (const file of candidates) {
+        let content = fs.readFileSync(file, 'utf8');
+        let modified = false;
+
+        const iPattern = /function i\(a\)\{let b=Math\.max\(0,Math\.min\(100,\(0,e\.IQ\)\(a\?\.used_percent\?\?a\?\.percent_used,0\)\)\);return\{used:b,total:100,remaining:Math\.max\(0,100-b\),resetAt:\(0,e\.eZ\)\(a\?\.reset_at\?\?a\?\.resets_at\?\?a\?\.resetAt\?\?null\),unlimited:!1\}\}/;
+        const iReplacement = 'function i(a){let b=Math.max(0,Math.min(100,(0,e.IQ)(a?.used_percent??a?.percent_used,0))),w=Number(a?.limit_window_seconds||0);return{used:b,total:100,remaining:Math.max(0,100-b),resetAt:(0,e.eZ)(a?.reset_at??a?.resets_at??a?.resetAt??null),unlimited:!1,windowSeconds:w>0?w:void 0}}';
+        if (iPattern.test(content)) {
+            content = content.replace(iPattern, iReplacement);
+            modified = true;
+        }
+
+        const targetPattern = /function j\(a,b,c\)\{let d=h\(c\);if\(!d\)return!1;let e=d\.primary_window\|\|d\.primary\|\|c\.primary_window\|\|c\.primary,f=d\.secondary_window\|\|d\.secondary\|\|c\.secondary_window\|\|c\.secondary,g=!1;return e&&\(a\[b\?`\$\{b\}_session`:"session"\]=i\(e\),g=!0\),f&&\(a\[b\?`\$\{b\}_weekly`:"weekly"\]=i\(f\),g=!0\),g\}/;
+        const replacement = 'function j(a,b,c){let d=h(c);if(!d)return!1;let e=d.primary_window||d.primary||c.primary_window||c.primary,f=d.secondary_window||d.secondary||c.secondary_window||c.secondary,g=!1;if(e&&f){a[b?`${b}_session`:"session"]=i(e),a[b?`${b}_weekly`:"weekly"]=i(f),g=!0}else if(e&&!f){let p=i(e),w=Number(e.limit_window_seconds||0);w>86400&&w<=1209600?a[b?`${b}_weekly`:"weekly"]=p:a[b?`${b}_session`:"session"]=p,g=!0}else if(!e&&f){let p=i(f);a[b?`${b}_weekly`:"weekly"]=p,g=!0}return g}/*__9r_codex_usage_windows_v1__*/';
+
+        if (targetPattern.test(content)) {
+            content = content.replace(targetPattern, replacement);
+            modified = true;
+        }
+
+        if (modified) {
+            fs.writeFileSync(file, content, 'utf8');
+            console.log(`  ✅ Patched usage window mapping in ${path.basename(file)}`);
+            patchedCount++;
+        } else if (content.includes('__9r_codex_usage_windows_v1__')) {
+            console.log(`  → ${path.basename(file)} already patched`);
+            patchedCount++;
+        }
+    }
+
+    return patchedCount > 0;
+}
+
+// ============================================================
 // RUN
 // ============================================================
 const PATCH_DEFINITIONS = [
     { id: 0, name: 'SSR Restore', scope: 'dashboard', targets: ['server/app/(dashboard)/dashboard/quota/page.js'], run: restoreServerSsrBypass },
-    { id: 1, name: 'Bulk Import', scope: 'api', targets: ['server/app/api/oauth/codex/bulk-import/route.js'], run: patchBulkImport },
+    { id: 1, name: 'Bulk Import', scope: 'dashboard', targets: ['server/app/api/oauth/codex/bulk-import/route.js'], run: patchBulkImport },
     { id: 18, name: 'API UI Redirect', scope: 'api', targets: ['custom-server.js'], run: patchApiDashboardRedirect },
     { id: 24, name: 'K12 Engine', scope: 'api', targets: ['custom-server.js'], run: patchK12RotationEngine },
-    { id: 28, name: 'Model Tier Routing', scope: 'api', targets: ['server/chunks/*.js'], sources: ['model-account-routing.js'], run: patchModelAccountTierRouting },
+    { id: 28, name: 'Default Account Routing', scope: 'api', targets: ['server/chunks/*.js'], sources: ['default-account-routing.js'], run: patchDefaultAccountRouting },
+    { id: 29, name: 'Codex Usage Windows', scope: 'api', targets: ['server/chunks/*.js'], run: patchCodexUsageWindows },
     { id: 2, name: 'Providers', scope: 'dashboard', targets: ['static/chunks/app/(dashboard)/dashboard/providers/page-*.js'], run: patchProvidersPage },
     { id: 3, name: 'Quota', scope: 'dashboard', targets: ['static/chunks/app/(dashboard)/dashboard/quota/page-*.js', 'server/app/(dashboard)/dashboard/quota/page.js'], run: patchQuotaPage },
     { id: 19, name: 'Quota Pagination', scope: 'dashboard', targets: ['static/chunks/app/(dashboard)/dashboard/quota/page-*.js', 'server/app/(dashboard)/dashboard/quota/page.js'], run: patchQuotaPaginationNormalization },
@@ -2742,7 +3347,8 @@ if (requestedScopeHash) {
         console.error(`Invalid --scope value: ${requestedScope}`);
         process.exitCode = 1;
     } else {
-        const ver = JSON.parse(fs.readFileSync(path.join(BASE, '..', 'package.json'), 'utf8')).version;
+        const pkgPath = fs.existsSync(path.join(BASE, 'package.json')) ? path.join(BASE, 'package.json') : (fs.existsSync(path.join(BASE, '..', 'package.json')) ? path.join(BASE, '..', 'package.json') : null);
+        const ver = pkgPath ? JSON.parse(fs.readFileSync(pkgPath, 'utf8')).version : '0.5.59';
         console.log('=== 9router Patch Script ===');
         console.log(`Version: ${ver}`);
         console.log(`App root: ${BASE}`);
