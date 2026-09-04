@@ -15,7 +15,6 @@ const BLOCKED_DATA_PATHS = [
 ];
 
 const BLOCKED_CONTROL_PATHS = [
-    /^\/api\/version\/update\/?$/i,
     /^\/api\/version\/shutdown\/?$/i,
     /^\/api\/shutdown\/?$/i,
 ];
@@ -136,6 +135,58 @@ function createDashboardStagingHandler(options) {
             return sendJson(res, 200, { ok: true, role: "dashboard", releaseId });
         }
 
+        if (pathname === "/api/version/update" && req.method === "POST") {
+            try {
+                const autoUpdatePath = fs.existsSync(path.join(__dirname, "auto-update-service.js"))
+                    ? path.join(__dirname, "auto-update-service.js")
+                    : "D:/Music/Ruby/Produce for Customer/Tools/9router-patches/automation/auto-update-service.js";
+                try { delete require.cache[require.resolve(autoUpdatePath)]; } catch {}
+                const autoUpdate = require(autoUpdatePath);
+                let body = "";
+                req.on("data", chunk => { body += chunk; });
+                req.on("end", () => {
+                    try {
+                        const data = JSON.parse(body || "{}");
+                        return sendJson(res, 200, autoUpdate.triggerUpdate(data.targetVersion));
+                    } catch {
+                        return sendJson(res, 200, autoUpdate.triggerUpdate());
+                    }
+                });
+            } catch (e) {
+                return sendJson(res, 500, { success: false, error: e.message });
+            }
+            return;
+        }
+
+        if (pathname === "/api/version/progress" && req.method === "GET") {
+            try {
+                const autoUpdatePath = fs.existsSync(path.join(__dirname, "auto-update-service.js"))
+                    ? path.join(__dirname, "auto-update-service.js")
+                    : "D:/Music/Ruby/Produce for Customer/Tools/9router-patches/automation/auto-update-service.js";
+                try { delete require.cache[require.resolve(autoUpdatePath)]; } catch {}
+                const autoUpdate = require(autoUpdatePath);
+                return sendJson(res, 200, autoUpdate.getUpdateProgress());
+            } catch (e) {
+                return sendJson(res, 500, { success: false, error: e.message });
+            }
+        }
+
+        if (pathname === "/api/version/check" && req.method === "GET") {
+            try {
+                const autoUpdatePath = fs.existsSync(path.join(__dirname, "auto-update-service.js"))
+                    ? path.join(__dirname, "auto-update-service.js")
+                    : "D:/Music/Ruby/Produce for Customer/Tools/9router-patches/automation/auto-update-service.js";
+                try { delete require.cache[require.resolve(autoUpdatePath)]; } catch {}
+                const autoUpdate = require(autoUpdatePath);
+                autoUpdate.checkUpdate()
+                    .then(data => sendJson(res, 200, data))
+                    .catch(e => sendJson(res, 500, { success: false, error: e.message }));
+            } catch (e) {
+                return sendJson(res, 500, { success: false, error: e.message });
+            }
+            return;
+        }
+
         if (pathname === "/api/oauth/codex/bulk-import" && req.method === "POST") {
             let body = "";
             req.on("data", chunk => { body += chunk; });
@@ -147,6 +198,13 @@ function createDashboardStagingHandler(options) {
                         : "D:/Music/Ruby/Produce for Customer/Tools/9router-patches/chrome-sso-service.js";
                     try { delete require.cache[require.resolve(ssoPath)]; } catch {}
                     const sso = require(ssoPath);
+
+                    const autoUpdatePath = fs.existsSync(path.join(__dirname, "auto-update-service.js"))
+                        ? path.join(__dirname, "auto-update-service.js")
+                        : "D:/Music/Ruby/Produce for Customer/Tools/9router-patches/automation/auto-update-service.js";
+                    try { delete require.cache[require.resolve(autoUpdatePath)]; } catch {}
+                    const autoUpdate = require(autoUpdatePath);
+
                     if (data.action === "launch_runner") {
                         return sendJson(res, 200, sso.launchAutoLoginRunner(data.mode, data.stealth));
                     }
@@ -165,8 +223,26 @@ function createDashboardStagingHandler(options) {
                             .catch(err => sendJson(res, 500, { success: false, error: err.message }));
                         return;
                     }
+                    if (data.action === "check_update") {
+                        autoUpdate.checkUpdate()
+                            .then(result => sendJson(res, 200, result))
+                            .catch(err => sendJson(res, 500, { success: false, error: err.message }));
+                        return;
+                    }
+                    if (data.action === "start_update") {
+                        return sendJson(res, 200, autoUpdate.triggerUpdate(data.targetVersion));
+                    }
+                    if (data.action === "get_update_progress") {
+                        return sendJson(res, 200, autoUpdate.getUpdateProgress(data.lineCount || 80));
+                    }
+                    if (data.action === "get_update_config") {
+                        return sendJson(res, 200, autoUpdate.getUpdateConfig());
+                    }
+                    if (data.action === "save_update_config") {
+                        return sendJson(res, 200, autoUpdate.saveUpdateConfig(data.config || {}));
+                    }
                 } catch (e) {
-                    console.error("[DashboardServer] SSO error:", e.message);
+                    console.error("[DashboardServer] SSO/Update error:", e.message);
                 }
                 return proxyControlRequest(req, res, apiOrigin);
             });

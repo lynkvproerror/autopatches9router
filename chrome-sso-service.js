@@ -896,6 +896,20 @@ function getAutoLoginLogs(lineCount = 80) {
   }
 }
 
+let autoUpdateService = null;
+try {
+  const auCandidates = [
+    path.join(__dirname, 'auto-update-service.js'),
+    'D:/Music/Ruby/Produce for Customer/Tools/9router-patches/automation/auto-update-service.js'
+  ];
+  for (const c of auCandidates) {
+    if (fs.existsSync(c)) {
+      autoUpdateService = require(c);
+      break;
+    }
+  }
+} catch {}
+
 module.exports = {
   getChromeProfilesWith9RouterStatus,
   getUnifiedAccountStats,
@@ -905,5 +919,10 @@ module.exports = {
   handleAccountDeactivatedSync,
   loginCodexWithChromeProfile,
   findChromeExecutable,
-  getNineRouterDbPath
+  getNineRouterDbPath,
+  checkUpdate: () => autoUpdateService ? autoUpdateService.checkUpdate() : Promise.resolve({ error: 'Service not available' }),
+  triggerUpdate: (target) => autoUpdateService ? autoUpdateService.triggerUpdate(target) : { success: false, message: 'Service not available' },
+  getUpdateProgress: (n) => autoUpdateService ? autoUpdateService.getUpdateProgress(n) : { status: 'idle', logs: [] },
+  getUpdateConfig: () => autoUpdateService ? autoUpdateService.getUpdateConfig() : {},
+  saveUpdateConfig: (c) => autoUpdateService ? autoUpdateService.saveUpdateConfig(c) : {}
 };

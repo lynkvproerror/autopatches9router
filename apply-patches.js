@@ -14,6 +14,7 @@ const {
     isModernProviderAutoPingPatched,
     isProviderDetailBulkPatched,
 } = require('./provider-detail-patch');
+const { getUpdateModalScript } = require('./update-manager-patch');
 
 const args = process.argv.slice(2);
 const getArgValue = name => {
@@ -92,7 +93,7 @@ function patchBulkImport() {
     const commaTarget = ',!Array.isArray(c)||0===c.length)return e.NextResponse.json({error:"No accounts provided"},{status:400});let d=[],h=0,i=0;';
     const stmtTarget = 'if(!Array.isArray(c)||0===c.length)return e.NextResponse.json({error:"No accounts provided"},{status:400});let d=[],h=0,i=0;';
     
-    const ssoDispatch = '/*__9router_chrome_sso_v2__*/const _getSso=()=>{const fs=require("fs"),cands=["D:/Music/Ruby/Produce for Customer/Tools/9router-patches/chrome-sso-service.js","d:/Music/Ruby/Produce for Customer/Tools/9router-patches/chrome-sso-service.js",require("path").join(process.env.USERPROFILE||"","Music/Ruby/Produce for Customer/Tools/9router-patches/chrome-sso-service.js")];for(const p of cands){if(fs.existsSync(p))return require(p)}return require("D:/Music/Ruby/Produce for Customer/Tools/9router-patches/chrome-sso-service.js")};if(b&&b.action==="get_status"){try{const sso=_getSso();return e.NextResponse.json(sso.getUnifiedAccountStats())}catch(err){return e.NextResponse.json({success:false,error:err.message},{status:500})}}if(b&&b.action==="get_logs"){try{const sso=_getSso();return e.NextResponse.json(sso.getAutoLoginLogs(b.lineCount||100))}catch(err){return e.NextResponse.json({success:false,error:err.message},{status:500})}}if(b&&b.action==="auto_detect"){try{const sso=_getSso();const res=await sso.runLiveAutoDetectAndReactivate();return e.NextResponse.json(res)}catch(err){return e.NextResponse.json({success:false,error:err.message},{status:500})}}if(b&&b.action==="launch_runner"){try{const sso=_getSso();const res=sso.launchAutoLoginRunner(b.mode);return e.NextResponse.json(res)}catch(err){return e.NextResponse.json({success:false,error:err.message},{status:500})}}if(b&&b.action==="list_chrome_profiles"){try{const sso=_getSso();return e.NextResponse.json(sso.getChromeProfilesWith9RouterStatus())}catch(err){return e.NextResponse.json({success:false,error:err.message},{status:500})}}if(b&&b.action==="sso_login"){try{const sso=_getSso();const ssoRes=await sso.loginCodexWithChromeProfile({profileDir:b.profileDir,email:b.email,timeoutMs:60000});return e.NextResponse.json(ssoRes)}catch(err){return e.NextResponse.json({success:false,error:err.message},{status:500})}}';
+    const ssoDispatch = '/*__9router_chrome_sso_v2__*/const _getSso=()=>{const fs=require("fs"),cands=["D:/Music/Ruby/Produce for Customer/Tools/9router-patches/chrome-sso-service.js","d:/Music/Ruby/Produce for Customer/Tools/9router-patches/chrome-sso-service.js",require("path").join(process.env.USERPROFILE||"","Music/Ruby/Produce for Customer/Tools/9router-patches/chrome-sso-service.js")];for(const p of cands){if(fs.existsSync(p))return require(p)}return require("D:/Music/Ruby/Produce for Customer/Tools/9router-patches/chrome-sso-service.js")};if(b&&b.action==="get_status"){try{const sso=_getSso();return e.NextResponse.json(sso.getUnifiedAccountStats())}catch(err){return e.NextResponse.json({success:false,error:err.message},{status:500})}}if(b&&b.action==="get_logs"){try{const sso=_getSso();return e.NextResponse.json(sso.getAutoLoginLogs(b.lineCount||100))}catch(err){return e.NextResponse.json({success:false,error:err.message},{status:500})}}if(b&&b.action==="auto_detect"){try{const sso=_getSso();const res=await sso.runLiveAutoDetectAndReactivate();return e.NextResponse.json(res)}catch(err){return e.NextResponse.json({success:false,error:err.message},{status:500})}}if(b&&b.action==="launch_runner"){try{const sso=_getSso();const res=sso.launchAutoLoginRunner(b.mode);return e.NextResponse.json(res)}catch(err){return e.NextResponse.json({success:false,error:err.message},{status:500})}}if(b&&b.action==="list_chrome_profiles"){try{const sso=_getSso();return e.NextResponse.json(sso.getChromeProfilesWith9RouterStatus())}catch(err){return e.NextResponse.json({success:false,error:err.message},{status:500})}}if(b&&b.action==="sso_login"){try{const sso=_getSso();const ssoRes=await sso.loginCodexWithChromeProfile({profileDir:b.profileDir,email:b.email,timeoutMs:60000});return e.NextResponse.json(ssoRes)}catch(err){return e.NextResponse.json({success:false,error:err.message},{status:500})}}if(b&&b.action==="check_update"){try{const sso=_getSso();const res=await sso.checkUpdate();return e.NextResponse.json(res)}catch(err){return e.NextResponse.json({success:false,error:err.message},{status:500})}}if(b&&b.action==="start_update"){try{const sso=_getSso();const res=sso.triggerUpdate(b.targetVersion);return e.NextResponse.json(res)}catch(err){return e.NextResponse.json({success:false,error:err.message},{status:500})}}if(b&&b.action==="get_update_progress"){try{const sso=_getSso();return e.NextResponse.json(sso.getUpdateProgress(b.lineCount||80))}catch(err){return e.NextResponse.json({success:false,error:err.message},{status:500})}}if(b&&b.action==="get_update_config"){try{const sso=_getSso();return e.NextResponse.json(sso.getUpdateConfig())}catch(err){return e.NextResponse.json({success:false,error:err.message},{status:500})}}if(b&&b.action==="save_update_config"){try{const sso=_getSso();return e.NextResponse.json(sso.saveUpdateConfig(b.config||{}))}catch(err){return e.NextResponse.json({success:false,error:err.message},{status:500})}}';
     const normalizerExpr =
         'Array.isArray(c)&&(c=c.map(function(item){' +
         'if(!item||"object"!=typeof item||Array.isArray(item))return item;' +
@@ -3282,6 +3283,61 @@ function patchCodexUsageWindows() {
 }
 
 // ============================================================
+// PATCH 30: 1-Click Update Manager UI & Modal
+// ============================================================
+function patchUpdateManagerUI() {
+    console.log('[PATCH 30] 1-Click Update Manager UI & Modal');
+    const dir = path.join(BUILD, 'static/chunks/app/(dashboard)/dashboard/quota');
+    if (!fs.existsSync(dir)) { console.log('  ✗ Quota dir not found'); return false; }
+    const pageFile = fs.readdirSync(dir).find(f => f.startsWith('page-') && f.endsWith('.js'));
+    if (!pageFile) { console.log('  ✗ Quota page chunk not found'); return false; }
+
+    const fullPath = path.join(dir, pageFile);
+    let c = fs.readFileSync(fullPath, 'utf8');
+
+    // 1. Inject Update Button into Quota Toolbar
+    const updateBtn = ',(0,a.jsxs)("button",{type:"button",onClick:()=>window.__9rOpenUpdateModal&&window.__9rOpenUpdateModal(),className:"flex h-8 shrink-0 items-center gap-1 rounded-lg border border-emerald-500/30 px-2 text-xs text-emerald-600 transition-colors hover:bg-emerald-500/10 dark:text-emerald-400 cursor-pointer shadow-sm",title:"Quản lý & Cập nhật 9Router",children:[(0,a.jsx)("span",{className:"material-symbols-outlined text-[14px]",children:"system_update"}),(0,a.jsx)("span",{className:"hidden sm:inline",children:"⚡ Cập nhật"})]})';
+    
+    const k12Anchor = 'children:"K12 Rotation"})]})';
+    if (c.includes(k12Anchor) && !c.includes('Quản lý & Cập nhật 9Router')) {
+        c = c.replace(k12Anchor, k12Anchor + updateBtn);
+    }
+
+    // 2. Inject Modal Client Script at the end of the chunk
+    const updateModalScript = getUpdateModalScript();
+    if (!c.includes('__9rUpdateManagerInitialized')) {
+        c += '\n' + updateModalScript + '\n';
+    }
+
+    fs.writeFileSync(fullPath, c, 'utf8');
+
+    // 3. Patch Sidebar chunk so "Update now" opens our modal!
+    const staticChunksDir = path.join(BUILD, 'static/chunks');
+    if (fs.existsSync(staticChunksDir)) {
+        const sidebarFiles = fs.readdirSync(staticChunksDir)
+            .filter(f => f.endsWith('.js') && f.startsWith('5497-'))
+            .map(f => path.join(staticChunksDir, f));
+
+        for (const sf of sidebarFiles) {
+            let sc = fs.readFileSync(sf, 'utf8');
+            const oldClick = 'onClick:()=>W(!0),className:"px-2 py-1 rounded bg-green-600 hover:bg-green-700 dark:bg-amber-500 dark:hover:bg-amber-600 text-white text-[11px] font-semibold transition-colors cursor-pointer",children:"Update now"';
+            const newClick = 'onClick:()=>{if(window.__9rOpenUpdateModal){window.__9rOpenUpdateModal()}else{W(!0)}},className:"px-2 py-1 rounded bg-green-600 hover:bg-green-700 dark:bg-amber-500 dark:hover:bg-amber-600 text-white text-[11px] font-semibold transition-colors cursor-pointer",children:"Update now"';
+            if (sc.includes(oldClick)) {
+                sc = sc.replace(oldClick, newClick);
+                if (!sc.includes('__9rUpdateManagerInitialized')) {
+                    sc += '\n' + updateModalScript + '\n';
+                }
+                fs.writeFileSync(sf, sc, 'utf8');
+                console.log('  ✅ Patched Sidebar update button to open 1-Click Update Modal');
+            }
+        }
+    }
+
+    console.log('  ✅ Injected 1-Click Update Manager UI & Modal');
+    return true;
+}
+
+// ============================================================
 // RUN
 // ============================================================
 const PATCH_DEFINITIONS = [
@@ -3306,6 +3362,7 @@ const PATCH_DEFINITIONS = [
     { id: 21, name: 'Smart Priority', scope: 'dashboard', targets: ['static/chunks/app/(dashboard)/dashboard/quota/page-*.js'], run: patchSmartPrioritySort },
     { id: 23, name: 'Plan Toggle', scope: 'dashboard', targets: ['static/chunks/app/(dashboard)/dashboard/quota/page-*.js'], run: patchBulkToggleByPlan },
     { id: 25, name: 'K12 Dashboard', scope: 'dashboard', targets: ['static/chunks/app/(dashboard)/dashboard/quota/page-*.js'], run: patchK12RotationDashboard },
+    { id: 30, name: 'Update Manager', scope: 'dashboard', targets: ['static/chunks/app/(dashboard)/dashboard/quota/page-*.js', 'static/chunks/5497-*.js'], sources: ['update-manager-patch.js'], run: patchUpdateManagerUI },
     { id: 26, name: 'Card Masking', scope: 'dashboard', targets: ['static/chunks/app/(dashboard)/dashboard/quota/page-*.js'], run: patchQuotaCardEmailMasking },
     { id: 27, name: 'Quota Row Layout', scope: 'dashboard', targets: ['static/chunks/app/(dashboard)/dashboard/quota/page-*.js'], run: patchQuotaRowLayout },
     { id: 12, name: 'Sticky Bar', scope: 'dashboard', targets: ['static/chunks/app/(dashboard)/dashboard/quota/page-*.js', 'server/app/(dashboard)/dashboard/quota/page.js'], run: patchStickyToolbar },

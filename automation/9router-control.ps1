@@ -336,16 +336,20 @@ function Get-DashboardStageFingerprint {
         "patch=$((Get-FileHash -LiteralPath $PatchScript -Algorithm SHA256).Hash)"
         "gateway=$((Get-FileHash -LiteralPath $DashboardStageServer -Algorithm SHA256).Hash)"
         "controller=$((Get-FileHash -LiteralPath $ControlScript -Algorithm SHA256).Hash)"
-        "config=$((Get-FileHash -LiteralPath $ConfigFile -Algorithm SHA256).Hash)"
     )
     return Get-BytesSha256Hex -Bytes ([Text.Encoding]::UTF8.GetBytes(($parts -join "`n")))
 }
 
 function Assert-DashboardControllerSourcesCurrent {
     $controlHash = (Get-FileHash -LiteralPath $ControlScript -Algorithm SHA256).Hash
-    $configHash = (Get-FileHash -LiteralPath $ConfigFile -Algorithm SHA256).Hash
-    if ($controlHash -ne $LoadedControlHash -or $configHash -ne $LoadedConfigHash) {
-        throw "Dashboard controller or config changed on disk; restart the central monitor before staging."
+    if ($controlHash -ne $LoadedControlHash) {
+        throw "Dashboard controller changed on disk; restart the central monitor before staging."
+    }
+    $currentConfigHash = (Get-FileHash -LiteralPath $ConfigFile -Algorithm SHA256).Hash
+    if ($currentConfigHash -ne $script:LoadedConfigHash) {
+        $script:Config = Read-JsonState $ConfigFile
+        $script:LoadedConfigHash = $currentConfigHash
+        Write-ControlLog "Reloaded updated 9router-control.json configuration."
     }
 }
 
@@ -386,6 +390,14 @@ function Initialize-DashboardStageData {
         if (Test-Path -LiteralPath $source) {
             Copy-Item -LiteralPath $source -Destination (Join-Path $DataDir $name) -Force
         }
+    }
+    $prodDb = Join-Path $ProductionDataDir "db\data.sqlite"
+    $stageDbDir = Join-Path $DataDir "db"
+    New-Item -ItemType Directory -Force -Path $stageDbDir | Out-Null
+    $stageDb = Join-Path $stageDbDir "data.sqlite"
+    if (Test-Path -LiteralPath $prodDb) {
+        $syncCode = "const path=require('path');const {DatabaseSync}=require('node:sqlite');const src=new DatabaseSync(process.argv[1],{open:true,readOnly:true});const dst=new DatabaseSync(process.argv[2],{open:true});try{const s=src.prepare('SELECT * FROM settings').all();for(const r of s){dst.prepare('INSERT OR REPLACE INTO settings(id,data) VALUES(?,?)').run(r.id,r.data);}}catch(e){}try{const c=src.prepare('SELECT * FROM providerConnections').all();for(const r of c){const k=Object.keys(r);dst.prepare('INSERT OR REPLACE INTO providerConnections('+k.join(',')+') VALUES('+k.map(()=>'?').join(',')+')').run(...Object.values(r));}}catch(e){}src.close();dst.close();"
+        & $NodeExe -e $syncCode $prodDb $stageDb 2>$null
     }
 }
 
@@ -1493,6 +1505,40 @@ function Start-Monitor {
                     if ($latest -and $installed -ne $latest) {
                         Set-PendingUpdate $latest
                         Write-ControlLog "Update $latest is pending until port $Port is stopped."
+
+                        if ([bool]$Config.autoApplyUpdate) {
+                            $hourNow = (Get-Date).Hour
+                            $startHour = if ($null -ne $Config.autoUpdateHourStart) { [int]$Config.autoUpdateHourStart } else { 3 }
+                            $endHour = if ($null -ne $Config.autoUpdateHourEnd) { [int]$Config.autoUpdateHourEnd } else { 5 }
+                            $inWindow = if ($startHour -le $endHour) {
+                                $hourNow -ge $startHour -and $hourNow -lt $endHour
+                            } else {
+                                $hourNow -ge $startHour -or $hourNow -lt $endHour
+                            }
+                            if ($inWindow) {
+                                Write-ControlLog "Auto-update window active ($hourNow:00). Initiating isolated preparation and cutover for 9router $latest..."
+                                try {
+                                    $prepared = Prepare-UpdateCandidate -TargetVersion $latest
+                                    if ($prepared) {
+                                        Write-ControlLog "Isolated candidate 9router $latest passed all 30 patches. Initiating zero-downtime cutover..."
+                                        $rootProcess = Get-Managed9RouterRootProcess
+                                        if ($rootProcess) {
+                                            Stop-Managed9RouterProcessTree -RootProcessId ([int]$rootProcess.ProcessId)
+                                        }
+                                        $updateExit = Invoke-PreparedUpdateWhenStopped -Candidate $prepared
+                                        if ($updateExit -eq 0) {
+                                            Start-9RouterWhenStopped -SkipUpdate | Out-Null
+                                            Maintain-DashboardStage | Out-Null
+                                            Write-ControlLog "Background auto-update to 9router $latest succeeded!"
+                                        } else {
+                                            Write-ControlLog "Background auto-update cutover returned exit code $updateExit."
+                                        }
+                                    }
+                                } catch {
+                                    Write-ControlLog "Background auto-update failed: $($_.Exception.Message)"
+                                }
+                            }
+                        }
                     }
                     $lastUpdateCheck = Get-Date
                 }
@@ -1603,6 +1649,27 @@ switch ($Action) {
     "Update" {
         $updateExitCode = Invoke-MaintenanceOperation -WaitMilliseconds 30000 -Operation {
             Invoke-UpdateWhenStopped
+        }
+        exit ([int]$updateExitCode)
+    }
+    "ApplyUpdateDirect" {
+        $updateExitCode = Invoke-MaintenanceOperation -WaitMilliseconds 30000 -Operation {
+            $latest = Get-LatestVersion
+            $installed = Get-InstalledVersion
+            $target = if ($latest) { $latest } else { $installed }
+            Write-ControlLog "Direct update candidate requested: $target"
+            $prepared = Prepare-UpdateCandidate -TargetVersion $target
+            if (-not $prepared) { throw "Could not prepare update candidate." }
+            $rootProcess = Get-Managed9RouterRootProcess
+            if ($rootProcess) {
+                Stop-Managed9RouterProcessTree -RootProcessId ([int]$rootProcess.ProcessId)
+            }
+            $cutoverExit = Invoke-PreparedUpdateWhenStopped -Candidate $prepared
+            if ($cutoverExit -ne 0) { throw "Prepared update cutover returned exit code $cutoverExit" }
+            if (-not (Start-9RouterWhenStopped -SkipUpdate)) { throw "Failed to start 9router after update" }
+            Maintain-DashboardStage | Out-Null
+            Write-ControlLog "Direct update to 9router $target completed successfully."
+            return 0
         }
         exit ([int]$updateExitCode)
     }

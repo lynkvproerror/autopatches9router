@@ -11,5 +11,8 @@
   "healthTimeoutSeconds": 5,
   "startTimeoutSeconds": 20,
   "updateCheckIntervalMinutes": 60,
-  "checkUpdateWhenStopped": true
+  "checkUpdateWhenStopped": true,
+  "autoApplyUpdate": true,
+  "autoUpdateHourStart": 3,
+  "autoUpdateHourEnd": 5
 }
