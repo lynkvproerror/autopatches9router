@@ -83,3 +83,27 @@ test('recognizes legacy and modern provider-detail bulk patches', () => {
     assert.equal(isProviderDetailBulkPatched(`${common}session=list.find(q=>q)`), true);
     assert.equal(isProviderDetailBulkPatched(common), false);
 });
+
+test('modern provider-detail bulk action injection produces valid JavaScript syntax', () => {
+    const vm = require('node:vm');
+    const connections = 'conns';
+    const modalSetter = 'eK';
+    const refreshAlias = 'tg';
+    const ssoModalCode = `chromeSsoModal=()=>{` +
+        `window.__9rLogInterval=null;window.__9rAutoScroll=true;` +
+        `window.__9rCloseModal=()=>{};` +
+        `}`;
+    const modernFuncs = [
+        ',__9rFetchAllQuotas=async conns=>({}),__9rGetRemaining=q=>null,',
+        `bulkDelete401=()=>{let conns=(${connections}||[]);},`,
+        `bulkDeactivate0Weekly=()=>{},`,
+        `bulkActivateWeekly=()=>{},`,
+        ssoModalCode,
+        ',t_=async()=>{},tU=async e=>{}',
+    ].join('');
+
+    const testSnippet = `function testScope(){let a=1${modernFuncs};}`;
+    assert.doesNotThrow(() => {
+        new vm.Script(testSnippet);
+    });
+});

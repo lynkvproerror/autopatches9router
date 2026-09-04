@@ -919,6 +919,11 @@ function patchDetailPageBulk() {
                 upgraded = true;
             }
         }
+        if (c.includes('})},window.__9rLogInterval=null;')) {
+            c = c.replace('})},window.__9rLogInterval=null;', '})},chromeSsoModal=()=>{window.__9rLogInterval=null;')
+                 .replace('}});},,', '}});}},');
+            upgraded = true;
+        }
         const sharedSsoModalCode = `var __9rLogInterval=null;var __9rAutoScroll=true;` +
             `var __9rCloseModal=()=>{if(__9rLogInterval){clearInterval(__9rLogInterval);__9rLogInterval=null;}const el=document.getElementById("__9r_sso_modal");if(el)el.remove();};` +
             `var __9rSsoRunner=(m)=>{const st=document.getElementById("__9r_chk_stealth");const isSt=st?st.checked:true;fetch("/api/oauth/codex/bulk-import",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"launch_runner",mode:m,stealth:isSt})}).then(r=>r.json()).then(d=>{alert(d.message||"🚀 Tiến trình Auto-Login đang xử lý!");__9rViewLogs();}).catch(e=>{alert("🚀 Tiến trình đang được khởi động...");});};` +
@@ -1118,13 +1123,13 @@ function patchDetailPageBulk() {
         const refreshAlias = modernAnchors ? modernAnchors.refreshAlias : 'tg';
         const jsxAlias = modernButtonMatch[1];
         const componentAlias = modernButtonMatch[2];
-        const ssoModalCode = `window.__9rLogInterval=null;window.__9rAutoScroll=true;` +
+        const ssoModalCode = `chromeSsoModal=()=>{` +
+            `window.__9rLogInterval=null;window.__9rAutoScroll=true;` +
             `window.__9rCloseModal=()=>{if(window.__9rLogInterval){clearInterval(window.__9rLogInterval);window.__9rLogInterval=null;}const el=document.getElementById("__9r_sso_modal");if(el)el.remove();};` +
             `window.__9rSsoRunner=(m)=>{const st=document.getElementById("__9r_chk_stealth");const isSt=st?st.checked:true;fetch("/api/oauth/codex/bulk-import",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"launch_runner",mode:m,stealth:isSt})}).then(r=>r.json()).then(d=>{alert(d.message||"🚀 Tiến trình Auto-Login đang xử lý!");window.__9rViewLogs();}).catch(e=>{alert("🚀 Tiến trình đang được khởi động...");});};` +
             `window.__9rViewLogs=()=>{fetch("/api/oauth/codex/bulk-import",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"get_logs",lineCount:200})}).then(r=>r.json()).then(d=>{let logBox=document.getElementById("__9r_log_content");if(logBox){const wasBottom = logBox.scrollHeight - logBox.scrollTop <= logBox.clientHeight + 50;logBox.textContent=d.logs||"Chưa có dữ liệu log.";if(window.__9rAutoScroll || wasBottom){logBox.scrollTop=logBox.scrollHeight;}}});};` +
             `window.__9rCopyLogs=()=>{let logBox=document.getElementById("__9r_log_content");if(logBox&&logBox.textContent){navigator.clipboard.writeText(logBox.textContent).then(()=>{const btn=document.getElementById("__9r_btn_copy_log");if(btn){const old=btn.textContent;btn.textContent="✅ Đã Copy!";setTimeout(()=>btn.textContent=old,1500);}}).catch(()=>{alert("Vui lòng chọn văn bản và nhấn Ctrl+C để sao chép.");});}};` +
             `window.__9rToggleAutoScroll=()=>{window.__9rAutoScroll=!window.__9rAutoScroll;const btn=document.getElementById("__9r_btn_autoscroll");if(btn){btn.textContent=window.__9rAutoScroll?"⚡ Tự cuộn: BẬT":"⏸️ Tự cuộn: TẮT";btn.className=window.__9rAutoScroll?"px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 text-xs font-mono transition-colors cursor-pointer":"px-2.5 py-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 text-xs font-mono transition-colors cursor-pointer";}};` +
-            `chromeSsoModal=()=>{` +
             `window.__9rCloseModal();` +
             `const modal=document.createElement("div");` +
             `modal.id="__9r_sso_modal";` +
@@ -1215,7 +1220,7 @@ function patchDetailPageBulk() {
             `document.getElementById("__9r_badge_revoked").textContent=\`Fix (\${d.revokedCount||0}) →\`;` +
             `}` +
             `});` +
-            `},`;
+            `}`;
 
         const modernFuncs = [
             ',__9rFetchAllQuotas=async conns=>{',
